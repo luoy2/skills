@@ -10,6 +10,7 @@ inherited credential or native login turns the sandbox into a hole.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 
@@ -220,3 +221,17 @@ def test_a_shared_plan_is_not_leak_checked_but_its_marker_hits_are_recorded(kit,
     assert "test_fix_name" not in seen["prompt"]
     assert rec["plan_marker_hits"] == ["test_fix_name"]
     assert rec["reasons"] == ["isolation: stopped by the test"]
+
+def test_the_archived_report_names_the_overlaid_instruction_files(kit, monkeypatch, tmp_path):
+    """A rerun under a new SOP must say so in the archive, or it reads as the original snapshot."""
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    case = {"id": "W", "title": "t", "kind": "implement", "hidden_tests": {"expected": 42, "baseline": 3}}
+    rows = [_row("W-a-high-direct-r1", "W", mode="direct", rep=1, cost_usd=2.0, chain_cost_usd=2.0,
+                 tests={"passed": 20}, overlay={"AGENTS.md": "abc123"})]
+    assert "overlay_dir" in kit.render_markdown("b", rows, {"W": case}, {"judges": []})
+    assert "`AGENTS.md`" in kit.render_markdown("b", rows, {"W": case}, {"judges": []})
+    plain = [{**rows[0], "overlay": {}}]
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "runs.jsonl").write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+    assert kit.summarize("b", {"W": case}, {"judges": []})[0]["overlay"] == {"AGENTS.md": "abc123"}
+    assert "overlay_dir" not in kit.render_markdown("b", plain, {"W": case}, {"judges": []})

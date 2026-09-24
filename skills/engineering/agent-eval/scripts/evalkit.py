@@ -1559,7 +1559,7 @@ def summarize(batch, cases, arms):
     for rec in records.values():
         row = {k: rec.get(k) for k in ("run_id", "case", "candidate", "model", "effort", "mode", "status",
                                         "reasons", "cost_usd", "chain_cost_usd", "elapsed_s", "kind", "rep",
-                                        "tests", "diff", "plan_run", "plan_cost_usd")}
+                                        "tests", "diff", "plan_run", "plan_cost_usd", "overlay")}
         row["scores"] = {}
         targets = [("final", None)] if rec.get("kind") == "implement" else judge_targets(rec)
         for target, _ in targets if rec.get("status") == "valid" else []:

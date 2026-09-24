@@ -30,10 +30,13 @@ helps, and as a regression baseline when a new model ships.
 
 How it works:
 
-1. **Mine corrections.** Scan your Claude Code and Codex session logs for
-   messages where you pushed back on an agent. Keep judgment errors (wrong root
-   cause, skipped verification, waiting instead of acting, scope creep); drop
-   typos. You pick 3–5 of different kinds on a generated page.
+1. **Mine corrections.** Every message you typed after an agent turn is
+   extracted from your Claude Code and Codex session logs, and a small, cheap
+   model (Claude Haiku by default) labels each one: a correction or not, what
+   kind of mistake, a one-line summary. No keyword list decides, because people
+   often correct an agent with a pointed question. The agent keeps judgment
+   errors (wrong root cause, skipped verification, waiting instead of acting,
+   scope creep), and you pick 3–5 of different kinds on a generated page.
 2. **Write each case.** Your verbatim messages, a neutral statement of the facts
    the agent knew, the commit it was working on (recovered from the checkout's
    reflog, not guessed from time), and a two-level **Trap**: `direction` (the

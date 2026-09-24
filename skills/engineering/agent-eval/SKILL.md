@@ -25,10 +25,13 @@ it; read only that one.
    (models × efforts), which delivery modes, budget cap, repeats. Estimate cost
    from a smoke run before committing to a full matrix — high effort plus a
    reviewer costs several dollars per run. → `references/running.md` §Scope
-2. **Mine corrections.** `scripts/mine_corrections.py` lists owner messages that
-   push back on an agent, with the agent turn before them. Hits are leads: read
-   around each, keep judgment errors (wrong root cause, skipped verification,
-   stale SOP, scope creep, waiting instead of acting), drop typos. One case per
+2. **Mine corrections.** `scripts/mine_corrections.py extract` writes every
+   message the owner typed after an agent turn; `classify` has a small, cheap
+   model (default Claude Haiku) label each one, and `leads` lists the
+   corrections. No keyword list decides what counts: the owner often corrects
+   with a pointed question. Leads are not cases: read around each, keep judgment
+   errors (wrong root cause, skipped verification, stale SOP, scope creep,
+   waiting instead of acting), drop style fixes. One case per
    correction moment, not per session. Draft 6–10 candidates into a
    candidates JSON and render `scripts/picker_page.py`; the owner picks 3–5 of
    different error types. → `references/case-authoring.md` §Finding

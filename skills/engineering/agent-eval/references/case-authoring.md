@@ -6,14 +6,26 @@ from the conversation that the repository cannot show).
 
 ## Finding
 
-- Run `scripts/mine_corrections.py` over the project's Claude Code transcripts
-  (`~/.claude/projects/<encoded-repo-path>/*.jsonl`) and, if used, Codex rollouts
-  (`--codex-home ~/.codex`). Filter by `--model` to target the model you want to
-  replace, `--since` for recent work.
-- Keyword hits include pasted handoffs and rhetorical questions. For each hit read
-  the surrounding turns. Keep a hit when the correction changes the agent's
-  judgment: wrong root cause, placement, stale SOP, skipped verification,
-  waiting instead of acting, scope creep. Drop wording fixes and typos.
+- `scripts/mine_corrections.py extract` reads the project's Claude Code transcripts
+  (`~/.claude/projects/<encoded-repo-path>*`, worktrees included) and, if used,
+  Codex rollouts (`--codex-home ~/.codex --codex-cwd <repo path>`; Codex keeps all
+  projects together). It keeps every message the owner typed after an agent turn
+  and drops only injected text: tool results, compaction summaries, reminders,
+  subagent threads. `--model` targets the model you want to replace, `--since`
+  recent work.
+- `classify` sends batches to a small model (`--classifier claude:claude-haiku-4-5`
+  or `codex:<model>`): the owner's own words or not, correction or not, kind
+  (judgment, instruction, fact, style), whether it is about code the agent wrote
+  (a lead for an implementation case), and a one-line summary. Thinking stays on:
+  without it, recall on known corrections fell from 4/4 to 1/4. About $0.004 per
+  message and 20 messages per 1–2 minutes a call; set `--budget` and `--parallel`,
+  rerun to resume. Check recall on corrections you already know (the moment each
+  case records, not its task messages) before trusting it on the rest, and read a
+  sample of both labels.
+- `leads` lists the corrections. For each, read the surrounding turns. Keep a lead
+  when the correction changes the agent's judgment: wrong root cause, placement,
+  stale SOP, skipped verification, waiting instead of acting, scope creep. Drop
+  wording fixes.
 - One case per correction moment. A long session can yield several.
 - Prefer moments whose right answer the owner stated clearly, and whose task can
   be posed as "given this snapshot and instruction, answer and plan".
