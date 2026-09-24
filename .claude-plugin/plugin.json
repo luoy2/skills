@@ -1,0 +1,15 @@
+{
+  "name": "luoy2-skills",
+  "version": "0.1.0",
+  "description": "Agent skills from real engineering work, starting with agent-eval: evaluate models and thinking effort on the mistakes your own agents made.",
+  "author": {
+    "name": "luoy2",
+    "url": "https://github.com/luoy2"
+  },
+  "repository": "https://github.com/luoy2/skills",
+  "license": "MIT",
+  "keywords": ["engineering", "skills", "eval", "benchmark", "agents"],
+  "skills": [
+    "./skills/engineering/agent-eval"
+  ]
+}

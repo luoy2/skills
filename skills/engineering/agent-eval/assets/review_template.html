@@ -1,0 +1,145 @@
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#1b2130; --muted:#5d6577; --line:#dfe2e8;
+  --accent:#3547b8; --accent-soft:#e8ebfa; --good:#1f7a4d; --good-soft:#e3f3ea;
+  --warn:#9a5b00; --warn-soft:#fbf0dc; --bad:#a3303a; --bad-soft:#f8e4e6; --btn-ink:#ffffff;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#12151c; --surface:#1a1f29; --ink:#e6e8ee; --muted:#9aa2b3; --line:#2c3342;
+    --accent:#8e9cf5; --accent-soft:#252c4a; --good:#6cc99a; --good-soft:#18342a;
+    --warn:#e0b060; --warn-soft:#3a2e17; --bad:#ec8b93; --bad-soft:#3d1f24; --btn-ink:#10131a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12151c; --surface:#1a1f29; --ink:#e6e8ee; --muted:#9aa2b3; --line:#2c3342;
+  --accent:#8e9cf5; --accent-soft:#252c4a; --good:#6cc99a; --good-soft:#18342a;
+  --warn:#e0b060; --warn-soft:#3a2e17; --bad:#ec8b93; --bad-soft:#3d1f24; --btn-ink:#10131a;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65}
+.wrap{max-width:940px;margin:0 auto;padding-inline:16px;padding-block:28px 140px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:26px;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:21px;font-weight:600;margin:0;text-wrap:balance}
+h3{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--muted);margin:0}
+p{margin:0}
+.lede{color:var(--muted);max-width:70ch}
+.mono,code{font-family:var(--mono);font-size:.88em}
+code{background:var(--accent-soft);padding:0 4px;border-radius:4px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tabs button{background:var(--surface);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--btn-ink);border-color:var(--accent)}
+.alert{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn);padding:10px 14px;border-radius:6px}
+.alert b{color:var(--warn)}
+.case{display:flex;flex-direction:column;gap:18px}
+.case-head{display:flex;flex-direction:column;gap:6px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.facts div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts b{display:block;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.04em}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.prompt{font-family:var(--sans);white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+ol,ul{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
+.item{display:grid;grid-template-columns:3.2em 1fr;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.tag{font-family:var(--mono);font-weight:500;color:var(--accent)}
+.item .ev{font-size:13px;color:var(--muted)}
+.item .ctl{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg label{padding:3px 10px;font-size:13px;cursor:pointer;border-left:1px solid var(--line)}
+.seg label:first-child{border-left:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.seg label:has(input[value="ok"]:checked){background:var(--good-soft);color:var(--good)}
+.seg label:has(input[value="edit"]:checked){background:var(--warn-soft);color:var(--warn)}
+.seg label:has(input[value="drop"]:checked){background:var(--bad-soft);color:var(--bad)}
+.note{flex:1;min-width:200px;font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.trap{border-left:3px solid var(--bad);padding-left:12px}
+.pass{border-left:3px solid var(--good);padding-left:12px}
+.leak li{font-size:14px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+.bar-in{max-width:940px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.count{font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);flex:1;min-width:200px}
+button{font:inherit;font-weight:600;background:var(--accent);color:var(--btn-ink);border:0;border-radius:8px;padding:8px 15px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#out{width:100%;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+@media (max-width:520px){.item{grid-template-columns:1fr}.item .ctl{grid-column:1}}
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>__TITLE__</h1>
+    <p class="lede">One tab per case: the prompt the candidate sees, the two-level Trap and each rubric item. Mark every item agree / change / drop, add a note to anything you change, then press "Copy marks" at the bottom and paste it back into the chat. Marks are stored only in this browser.</p>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <main id="cases"></main>
+</div>
+<div class="bar"><div class="bar-in">
+  <span class="count" id="count"></span>
+  <button id="copy" type="button">Copy marks</button>
+  <textarea id="out" rows="3" readonly hidden aria-label="Marks"></textarea>
+</div></div>
+<script>
+const DATA = /*__DATA__*/null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const STORE='review:'+DATA.key;
+let state={};try{state=JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){}
+const save=()=>{try{localStorage.setItem(STORE,JSON.stringify(state))}catch(e){}};
+function itemRow(key,tag,text,ev){
+  const s=state[key]||{v:"",n:""};
+  const opt=(v,l)=>`<label><input type="radio" name="${key}" value="${v}" ${s.v===v?'checked':''}><span>${l}</span></label>`;
+  return `<div class="item" data-key="${key}"><span class="tag">${esc(tag)}</span>
+    <div><div>${esc(text)}</div>${ev?`<div class="ev">Evidence: ${esc(ev)}</div>`:''}</div>
+    <div class="ctl"><span class="seg">${opt("ok","agree")}${opt("edit","change")}${opt("drop","drop")}</span>
+    <input class="note" id="${key}-n" placeholder="Note (optional)" value="${esc(s.n)}"></div></div>`;
+}
+function caseHTML(c){
+  const atts=(c.attachments||[]).map(a=>a.place?`${a.file} → placed in snapshot at ${a.place}`:`${a.file} (inline in the prompt)`).join('; ')||'none';
+  const trap=c.trap||{};
+  return `<section class="case" id="case-${c.id}" role="tabpanel">
+  <div class="case-head"><h2>${esc(c.id)} · ${esc(c.title)}</h2><p class="lede">${esc(c.source||'')}</p></div>
+  <div class="facts"><div><b>Snapshot SHA</b><span class="mono">${esc((c.snapshot||'').slice(0,12))}</span><br><span style="color:var(--muted);font-size:13px">${esc(c.snapshot_evidence||'')}</span></div>
+  <div><b>Attachments</b>${esc(atts)}</div></div>
+  <div class="block"><h3>Prompt (everything the candidate sees)</h3><pre class="prompt">${esc(c.prompt)}</pre>
+    ${itemRow(c.id+"-prompt","Prompt","Is the prompt neutral, with no hint of the answer, and are any background facts missing?","")}</div>
+  ${c.hidden_tests?`<div class="block"><h3>Implementation case: hidden tests and delivery modes</h3>
+    <p style="font-size:14px"><b>Delivery modes:</b> ${esc((c.modes||DATA.impl_modes||[]).join(', '))}</p>
+    <p style="font-size:14px"><b>Hidden tests</b> (invisible to the candidate, placed in the worktree after it finishes): ${c.hidden_tests.files.map(f=>`<code>${esc(f.place)}</code>`).join(', ')}, ${c.hidden_tests.expected} in total. ${esc(c.hidden_tests.calibration_note||'')}</p>
+    ${itemRow(c.id+"-tests","Hidden tests","Score implementations with these tests (passed / total)","")}</div>`:''}
+  <div class="block"><h3>Trap (two levels, each pass/fail)</h3>
+    <p class="trap"><b>The original mistake:</b> ${esc(trap.description)}</p>
+    ${trap.direction?itemRow(c.id+"-direction","Direction",trap.direction,""):''}
+    ${itemRow(c.id+"-pass","Pass",trap.pass,"")}</div>
+  <div class="block"><h3>Rubric (each judged yes or no)</h3>
+    ${(c.rubric||[]).map(r=>itemRow(c.id+"-"+r.id,r.id,r.text,r.evidence)).join('')}
+    <p style="font-size:14px"><b>Accepted equivalents:</b> ${esc(c.equivalents||'')}</p></div>
+  ${c.ask?`<div class="alert"><b>Your decision:</b> ${esc(c.ask)}<div style="margin-top:8px">${itemRow(c.id+"-ask","Answer","agree = judge as drafted; otherwise write your ruling in the note","")}</div></div>`:''}
+  <div class="block leak"><h3>Leak markers (must not appear in the snapshot or the prompt)</h3><ul>${(c.leak_markers||[]).map(l=>`<li><code>${esc(l)}</code></li>`).join('')}</ul></div>
+</section>`;
+}
+const common=`<section class="case" id="case-_common" role="tabpanel"><div class="case-head"><h2>Shared rubric</h2></div>
+  <div class="block">${(DATA.common.rubric||[]).map(r=>itemRow("common-"+r.id,r.id,r.text,r.evidence)).join('')}</div></section>`;
+const main=document.getElementById('cases'),tabs=document.getElementById('tabs');
+const panels=[...DATA.cases.map(c=>({id:c.id,label:c.id+" · "+c.title,html:caseHTML(c)})),{id:"_common",label:"Shared rubric",html:common}];
+main.innerHTML=panels.map(p=>p.html).join('');
+tabs.innerHTML=panels.map((p,i)=>`<button type="button" role="tab" aria-selected="${i===0}" data-id="${p.id}">${esc(p.label)}</button>`).join('');
+function show(id){panels.forEach(p=>{document.getElementById('case-'+p.id).hidden=p.id!==id});tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected',b.dataset.id===id))}
+tabs.addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.id)});
+show(panels[0].id);
+const keys=[...document.querySelectorAll('.item')].map(d=>d.dataset.key);
+function update(){const done=keys.filter(k=>state[k]&&state[k].v).length;const ed=keys.filter(k=>state[k]&&(state[k].v==='edit'||state[k].v==='drop')).length;document.getElementById('count').textContent=`${done} / ${keys.length} marked · ${ed} to change or drop`}
+main.addEventListener('change',e=>{const it=e.target.closest('.item');if(!it)return;const k=it.dataset.key;state[k]=state[k]||{v:"",n:""};if(e.target.type==='radio')state[k].v=e.target.value;save();update()});
+main.addEventListener('input',e=>{if(!e.target.classList.contains('note'))return;const k=e.target.closest('.item').dataset.key;state[k]=state[k]||{v:"",n:""};state[k].n=e.target.value;save()});
+update();
+document.getElementById('copy').addEventListener('click',()=>{
+  const label={ok:"agree",edit:"change",drop:"drop"};
+  const text="Eval case review marks\n"+keys.map(k=>{const s=state[k]||{};return `${k}: ${label[s.v]||"unmarked"}${s.n?" — "+s.n:""}`}).join('\n');
+  const out=document.getElementById('out');out.value=text;out.hidden=false;
+  const btn=document.getElementById('copy');
+  navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied — paste it back into the chat'},()=>{out.select();btn.textContent='Copy the box below by hand'});
+});
+</script>

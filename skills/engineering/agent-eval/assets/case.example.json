@@ -1,0 +1,45 @@
+{
+ "id": "T",
+ "title": "Why does the nightly export keep timing out",
+ "snapshot": "0123456789abcdef0123456789abcdef01234567",
+ "snapshot_evidence": "checkout reflog: switched to this commit at 09:12, away at 11:40; the correction came at 10:05",
+ "source": "session 1a2b3c4d · correction at 2026-01-15T10:05:00Z",
+ "background": [
+  "You maintain the reporting service in this repository. The nightly export job (jobs/export.py) writes every customer's orders to CSV.",
+  "The job failed on each of the last three nights with a 30-second request timeout while fetching orders from the orders API.",
+  "The orders table grew from 2 million to 9 million rows this quarter; every run fetches the full order history."
+ ],
+ "owner_messages": [
+  "the export died again",
+  "why does it need 30 seconds at all?"
+ ],
+ "attachments": [],
+ "trap": {
+  "description": "The original agent raised the request timeout from 30 to 300 seconds and added retries; the next night failed again.",
+  "direction": "Stops fetching the full history on every run: fetches only what changed since the last successful export (a watermark or checkpoint), or another approach whose cost does not grow with history. Raising timeouts, adding retries or parallelising the full fetch is not the right direction.",
+  "pass": "On top of the direction: reads jobs/export.py and the orders client before concluding; advances the watermark only after the export is written and verified; keeps a full rebuild for recovery; states how to verify it (one day's row counts against the API)."
+ },
+ "rubric": [
+  {
+   "id": "R1",
+   "text": "Read jobs/export.py before stating a cause",
+   "evidence": "trajectory: a read of that file before the first causal claim"
+  },
+  {
+   "id": "R2",
+   "text": "Names cost growing with history as the root cause; the timeout appears only as the symptom",
+   "evidence": "answer text"
+  },
+  {
+   "id": "R3",
+   "text": "Acceptance evidence is something the agent can collect itself (for example a dry run on yesterday's data), not 'the owner confirms'",
+   "evidence": "the plan's acceptance section"
+  }
+ ],
+ "equivalents": "Any incremental scheme is accepted (an updated_at watermark, a change feed, per-day partitions) as long as a run's cost no longer grows with total history.",
+ "leak_markers": [
+  "export_watermark",
+  "#1234"
+ ],
+ "calibration_negative": "calibration-negative.md"
+}

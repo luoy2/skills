@@ -1,0 +1,117 @@
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#1b2130; --muted:#5d6577; --line:#dfe2e8;
+  --accent:#3547b8; --accent-soft:#e8ebfa; --good:#1f7a4d; --good-soft:#e3f3ea;
+  --warn:#9a5b00; --warn-soft:#fbf0dc; --bad:#a3303a; --bad-soft:#f8e4e6; --btn-ink:#ffffff;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#12151c; --surface:#1a1f29; --ink:#e6e8ee; --muted:#9aa2b3; --line:#2c3342;
+    --accent:#8e9cf5; --accent-soft:#252c4a; --good:#6cc99a; --good-soft:#18342a;
+    --warn:#e0b060; --warn-soft:#3a2e17; --bad:#ec8b93; --bad-soft:#3d1f24; --btn-ink:#10131a;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12151c; --surface:#1a1f29; --ink:#e6e8ee; --muted:#9aa2b3; --line:#2c3342;
+  --accent:#8e9cf5; --accent-soft:#252c4a; --good:#6cc99a; --good-soft:#18342a;
+  --warn:#e0b060; --warn-soft:#3a2e17; --bad:#ec8b93; --bad-soft:#3d1f24; --btn-ink:#10131a;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65}
+.wrap{max-width:940px;margin:0 auto;padding-inline:16px;padding-block:28px 140px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:26px;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:21px;font-weight:600;margin:0;text-wrap:balance}
+h3{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--muted);margin:0}
+p{margin:0}
+.lede{color:var(--muted);max-width:70ch}
+.mono,code{font-family:var(--mono);font-size:.88em}
+code{background:var(--accent-soft);padding:0 4px;border-radius:4px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tabs button{background:var(--surface);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--btn-ink);border-color:var(--accent)}
+.alert{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn);padding:10px 14px;border-radius:6px}
+.alert b{color:var(--warn)}
+.case{display:flex;flex-direction:column;gap:18px}
+.case-head{display:flex;flex-direction:column;gap:6px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.facts div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px}
+.facts b{display:block;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.04em}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.prompt{font-family:var(--sans);white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:14px;margin:0}
+ol,ul{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
+.item{display:grid;grid-template-columns:3.2em 1fr;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.tag{font-family:var(--mono);font-weight:500;color:var(--accent)}
+.item .ev{font-size:13px;color:var(--muted)}
+.item .ctl{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg label{padding:3px 10px;font-size:13px;cursor:pointer;border-left:1px solid var(--line)}
+.seg label:first-child{border-left:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.seg label:has(input[value="ok"]:checked){background:var(--good-soft);color:var(--good)}
+.seg label:has(input[value="edit"]:checked){background:var(--warn-soft);color:var(--warn)}
+.seg label:has(input[value="drop"]:checked){background:var(--bad-soft);color:var(--bad)}
+.note{flex:1;min-width:200px;font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.trap{border-left:3px solid var(--bad);padding-left:12px}
+.pass{border-left:3px solid var(--good);padding-left:12px}
+.leak li{font-size:14px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+.bar-in{max-width:940px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.count{font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);flex:1;min-width:200px}
+button{font:inherit;font-weight:600;background:var(--accent);color:var(--btn-ink);border:0;border-radius:8px;padding:8px 15px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#out{width:100%;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+@media (max-width:520px){.item{grid-template-columns:1fr}.item .ctl{grid-column:1}}
+</style>
+
+<style>
+.cand{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;cursor:pointer}
+.cand:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cand input{width:20px;height:20px;margin-top:3px;accent-color:var(--accent)}
+.cand dl{display:grid;grid-template-columns:5.5em 1fr;gap:4px 12px;margin:10px 0 0;grid-column:2}
+.cand dt{color:var(--muted);font-size:13px} .cand dd{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.chip.rec{background:var(--ink);color:var(--surface)}
+.src{font-size:12px;color:var(--muted);grid-column:2;margin-top:6px}
+@media (max-width:520px){.cand dl{grid-template-columns:1fr}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px"><h1>__TITLE__</h1>
+  <p class="lede">Each candidate is a moment in a real session where an agent went wrong and the owner corrected it. Tick the ones to turn into eval cases, ideally of different error types, then press "Copy selection" at the bottom and paste it back into the chat.</p></header>
+  <section id="list" style="display:flex;flex-direction:column;gap:12px"></section>
+</div>
+<div class="bar"><div class="bar-in">
+  <span class="count" id="count"></span><button id="copy" type="button">Copy selection</button>
+  <textarea id="out" rows="2" readonly hidden aria-label="Selection"></textarea>
+</div></div>
+<script>
+const DATA=/*__DATA__*/null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const list=document.getElementById('list');
+list.innerHTML=DATA.candidates.map(c=>`<label class="cand" for="c-${esc(c.id)}">
+  <input type="checkbox" id="c-${esc(c.id)}" value="${esc(c.id)}" ${c.rec?'checked':''}>
+  <div><b style="font-family:var(--mono);color:var(--accent)">${esc(c.id)}</b> <b>${esc(c.title)}</b>
+    <div class="chips">${c.rec?'<span class="chip rec">recommended</span>':''}${(c.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div>
+  <dl><dt>Original task</dt><dd>${esc(c.task)}</dd><dt>What went wrong</dt><dd>${esc(c.wrong)}</dd>
+      <dt>Owner correction</dt><dd>“${esc(c.fix)}”</dd><dt>Right direction</dt><dd>${esc(c.right)}</dd></dl>
+  ${c.note?`<div class="note" style="grid-column:2;color:var(--warn)">${esc(c.note)}</div>`:''}
+  <div class="src">${esc(c.source||'')}${c.snapshot?` · snapshot <span class="mono">${esc(c.snapshot)}</span>`:''}</div>
+</label>`).join('');
+const count=document.getElementById('count');
+const picked=()=>DATA.candidates.filter(c=>document.getElementById('c-'+c.id).checked);
+function update(){const p=picked();count.textContent=`${p.length} selected`+(DATA.pick?` / ${DATA.pick}`:'')+(p.length?' · '+[...new Set(p.flatMap(c=>c.tags||[]))].join('; '):'')}
+list.addEventListener('change',update);update();
+document.getElementById('copy').addEventListener('click',()=>{
+  const text='Picked: '+picked().map(c=>`${c.id} (${c.title})`).join(', ');
+  const out=document.getElementById('out');out.value=text;out.hidden=false;
+  const btn=document.getElementById('copy');
+  navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied — paste it back into the chat'},()=>{out.select();btn.textContent='Copy the box below by hand'});
+});
+</script>

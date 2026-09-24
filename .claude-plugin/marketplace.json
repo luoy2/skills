@@ -1,0 +1,17 @@
+{
+  "name": "luoy2",
+  "owner": {
+    "name": "luoy2",
+    "url": "https://github.com/luoy2"
+  },
+  "description": "luoy2's agent skills, as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "luoy2-skills",
+      "source": "./",
+      "description": "Agent skills from real engineering work, starting with agent-eval: evaluate models and thinking effort on the mistakes your own agents made.",
+      "category": "engineering",
+      "keywords": ["engineering", "skills", "eval", "benchmark", "agents"]
+    }
+  ]
+}
