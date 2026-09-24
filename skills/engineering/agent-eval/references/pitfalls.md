@@ -14,6 +14,7 @@
 | Gateway did not serve the requested model | 429 cooling down / model absent | Probe each model before the batch; native fallback needs owner approval |
 | Pass condition too strict, no direction level | No candidate passed any Trap, so no signal | Two-level Trap |
 | An isolated planner named the fix's test file by the repository's convention | Every implementer sharing that plan was rejected on a leak marker | Leak-check the task prompt alone; record marker hits in the plan |
+| A shared leak marker matched the runner's own paths (`agent-eval` in the scratch root) | Every run invalid before it started | Pick markers that cannot appear in `scratch_root`, `allow_read` or the sandbox profile |
 | Only negative calibration | A judge failed even the owner-accepted answer at the pass level, unnoticed until a positive was added | Calibrate with a positive as well as a negative |
 | Average read as "review hurts" | SOP paused on a within-noise difference | Read raw reviews and answers before concluding |
 | `json.dump` rewrote a hand-formatted shared JSON | Unrelated diff noise | Insert text instead of re-serializing |
