@@ -1225,13 +1225,18 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
             "snapshot": case["snapshot"], "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"],
             "runtime": cand["runtime"],
             "client": cand["client"], "effort": effort, "mode": mode, "rep": run["rep"], "started_at": now()}
-    prompt = build_prompt(case, common)
+    # The leak check reads the task alone. A shared plan comes from a planner run that passed its
+    # own isolation check, so a marker in it is the planner's derivation (a test file named by the
+    # repository's convention), not a leak; it is recorded, not rejected.
+    task_prompt = prompt = build_prompt(case, common)
+    markers = case.get("leak_markers", []) + common.get("leak_markers", [])
     plan = None
     if planner_of(mode):
         plan = plans.get(plan_run_id(case["id"], planner_of(mode), run["rep"]))
         if not plan or plan.get("status") != "valid":
             return {**base, "status": "invalid", "reasons": ["plan unavailable"], "stages": [], "finished_at": now()}
         prompt += "\n\n" + common["split_plan_intro"] + "\n\n=== Plan ===\n" + plan["final"]
+        base["plan_marker_hits"] = [m for m in markers if m and m in plan["final"]]
     (out / "prompt.txt").write_text(prompt, encoding="utf-8")
     wt = prepare_snapshot(case, root)
     (root / "claude-config").mkdir()
@@ -1243,9 +1248,8 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
         write_codex_home(root / "codex-home", cand.get("client", "gateway"))
     ctx = {"cand": cand, "effort": effort, "root": root, "out": out, "key": key, "timeout": timeout,
            "profile": profile, "implement": True}
-    markers = case.get("leak_markers", []) + common.get("leak_markers", [])
     argv = claude_impl_argv(cand["model"], effort, profile) if cand["runtime"] == "claude" else None
-    failures = isolation_check(root, markers, prompt, impl_env(root, key, cand), cand["runtime"], cand["client"],
+    failures = isolation_check(root, markers, task_prompt, impl_env(root, key, cand), cand["runtime"], cand["client"],
                                argv=argv, profile_path=profile, implement=True)
     if failures:
         shutil.rmtree(root / "wt", ignore_errors=True)

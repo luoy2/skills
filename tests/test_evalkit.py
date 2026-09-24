@@ -185,3 +185,38 @@ def test_planning_repeats_name_each_run_and_leave_single_runs_unchanged(kit):
     assert [r["run_id"] for r in kit.expand_runs(cases, arms)] == ["I-astra-xhigh-solo"]
     assert [r["run_id"] for r in kit.expand_runs(cases, arms, repeats=2)] == \
         ["I-astra-xhigh-solo-r1", "I-astra-xhigh-solo-r2"]
+
+
+def test_a_shared_plan_is_not_leak_checked_but_its_marker_hits_are_recorded(kit, monkeypatch, tmp_path):
+    """An isolated planner may name the fix's test file by the repository's convention; that is no leak."""
+    monkeypatch.setattr(kit, "SCRATCH_ROOT", tmp_path / "scratch")
+    monkeypatch.setattr(kit, "RESULTS", tmp_path / "results")
+
+    def fake_snapshot(case, root):
+        wt = root / "wt"
+        for sub in ("wt", "home", "tmp"):
+            (root / sub).mkdir(parents=True)
+        (wt / "a.py").write_text("x = 1\n", encoding="utf-8")
+        _git(wt, "init", "-q")
+        _git(wt, "add", "-A")
+        _git(wt, "commit", "-qm", "snapshot")
+        return wt
+
+    seen = {}
+
+    def fake_check(root, markers, prompt, *args, **kwargs):
+        seen["prompt"] = prompt
+        return ["stopped by the test"]
+
+    monkeypatch.setattr(kit, "prepare_snapshot", fake_snapshot)
+    monkeypatch.setattr(kit, "isolation_check", fake_check)
+    case = {"id": "W", "kind": "implement", "snapshot": "abc", "background": ["b"], "owner_messages": ["m"],
+            "leak_markers": ["test_fix_name"]}
+    common = {"implement_suffix": "do it", "split_plan_intro": "plan below", "leak_markers": []}
+    cand = {"id": "sol", "model": "m", "runtime": "codex", "client": "gateway"}
+    run = {"run_id": "W-sol-high-split-p-r1", "case": "W", "candidate": cand, "effort": "high", "mode": "split-p", "rep": 1}
+    plans = {kit.plan_run_id("W", "p", 1): {"status": "valid", "final": "add tests/test_fix_name.py"}}
+    rec = kit.execute_impl_run(run, "b1", common, {"W": case}, {}, {}, "key", 60, plans)
+    assert "test_fix_name" not in seen["prompt"]
+    assert rec["plan_marker_hits"] == ["test_fix_name"]
+    assert rec["reasons"] == ["isolation: stopped by the test"]
