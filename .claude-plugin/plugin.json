@@ -1,8 +1,8 @@
 {
   "name": "luoy2-skills",
   "displayName": "Agent Retro",
-  "version": "0.4.2",
-  "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow. Both read your local session logs.",
+  "version": "0.5.0",
+  "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow (both read your local session logs); i-have-ocd keeps one main line and parks every other finding instead of fixing or asking about it on the spot.",
   "author": {
     "name": "luoy2",
     "url": "https://github.com/luoy2"
@@ -10,9 +10,10 @@
   "repository": "https://github.com/luoy2/skills",
   "license": "MIT",
   "privacyPolicyUrl": "https://github.com/luoy2/skills/blob/main/PRIVACY.md",
-  "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules"],
+  "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules", "focus"],
   "skills": [
     "./skills/engineering/agent-eval",
-    "./skills/engineering/questionnaire-review"
+    "./skills/engineering/questionnaire-review",
+    "./skills/engineering/i-have-ocd"
   ]
 }

@@ -3,10 +3,12 @@
 Agent skills from my own engineering work, straight from my `.claude` directory.
 They work with Claude Code and Codex.
 
-Both skills learn from your own session history, on your own computer, to help
+Two skills learn from your own session history, on your own computer, to help
 you work better with Claude Code: `agent-eval` finds which model and thinking
 effort avoid the mistakes your agents actually made, and `questionnaire-review`
-turns the way you answer your agents into rules they follow.
+turns the way you answer your agents into rules they follow. The third,
+`i-have-ocd`, keeps you and your agents on one main line: findings off that line
+are written down instead of fixed or asked about on the spot.
 
 Your session logs stay on your computer, and nothing is sent to me: the plugin
 has no server, account or telemetry. What leaves your computer is only what a
@@ -32,8 +34,8 @@ npx skills@1.7.0 add luoy2/skills
 
 ## Where it works
 
-Both skills run on your own computer, in Claude Code or Codex. They read your
-local session logs and run the `claude` and `codex` command-line tools, so they
+`agent-eval` and `questionnaire-review` run on your own computer, in Claude Code
+or Codex. They read your local session logs and run the `claude` and `codex` command-line tools, so they
 don't work in claude.ai chat or Cowork: the skills load there but can reach
 neither. agent-eval's model runs also need macOS, for `sandbox-exec`.
 [What each step reads and sends](#what-it-reads-and-where-it-sends-data) is
@@ -136,6 +138,31 @@ excerpts to Anthropic (see below), and the PR carries counts and rule text.
 Requirements: Claude Code, Python 3.11+ or [uv](https://docs.astral.sh/uv/),
 `node`, and the `claude` CLI for the classifier. Start with
 `skills/engineering/questionnaire-review/SKILL.md`.
+
+## i-have-ocd
+
+Some people can't leave a small defect alone; they want it fixed the moment they
+see it. Agents feed that urge by reporting every finding and asking about it
+right away. Each detour looks cheap. Together they scatter your attention, and
+work that should have been planned together gets done piecemeal. `i-have-ocd`
+keeps one main line: a title, a done-when criterion and the next step.
+
+- Every new item is sorted as main line, urgent, or parked.
+- Urgent means money or position risk, a production incident, a leaked
+  credential, or an identity check.
+- A parked item is written down in one line: what it is, why it matters and
+  where it was seen. It is not fixed or asked about on the spot.
+- Questions are only about main-line decisions.
+- Each reply ends with one next step and a `side +N` count.
+- Your own new ideas are done right away, and the main line is recorded as
+  paused.
+- When you ask for a review, parked items are grouped and planned in batches,
+  and the decisions come as one set of questions.
+
+It keeps its state in focus tools if your session has them, for example an MCP
+server shared by all your machines. Otherwise it uses one Markdown file per
+project under `~/.local/state/i-have-ocd/`. It reads no logs and sends nothing.
+Start with `skills/engineering/i-have-ocd/SKILL.md`.
 
 ## What it reads and where it sends data
 

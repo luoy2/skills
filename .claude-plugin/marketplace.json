@@ -9,9 +9,9 @@
     {
       "name": "luoy2-skills",
       "source": "./",
-      "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow. Both read your local session logs.",
+      "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow (both read your local session logs); i-have-ocd keeps one main line and parks every other finding instead of fixing or asking about it on the spot.",
       "category": "engineering",
-      "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules"]
+      "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules", "focus"]
     }
   ]
 }
