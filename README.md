@@ -15,8 +15,17 @@ Claude Code:
 Codex and other agents:
 
 ```
-npx skills@latest add luoy2/skills
+npx skills@1.7.0 add luoy2/skills
 ```
+
+## Where it works
+
+Both skills run on your own computer, in Claude Code or Codex. They read your
+local session logs and run the `claude` and `codex` command-line tools, so they
+don't work in claude.ai chat or Cowork: the skills load there but can reach
+neither. agent-eval's model runs also need macOS, for `sandbox-exec`.
+[What each step reads and sends](#what-it-reads-and-where-it-sends-data) is
+listed below.
 
 ## agent-eval
 
@@ -47,9 +56,15 @@ How it works:
    candidate will see it; you mark every item agree / change / drop.
 4. **Isolate and calibrate.** Each run gets a fresh one-commit snapshot with no
    later history, no credentials and no memory files. Codex runs inside macOS
-   `sandbox-exec`; Claude runs restricted to read-only tools on the snapshot.
-   Both judges (from different vendors) must fail the original wrong answer and
-   pass the answer you accepted before any model is scored.
+   `sandbox-exec`: outside the run's own folder it cannot read files under the
+   config's `deny_roots` (by default `/Users`, `/Volumes` and `/private/tmp`)
+   or write anywhere but the system temp folders. It can still use the network.
+   A planning Claude run gets read-only tools on the snapshot. Implementation runs turn off the candidate's permission prompts so
+   it can edit the snapshot (Claude `--dangerously-skip-permissions`, Codex
+   `danger-full-access`); they always run inside `sandbox-exec`, and the kit
+   refuses to start a write-capable Claude that isn't. Both judges (from
+   different vendors) must fail the original wrong answer and pass the answer
+   you accepted before any model is scored.
 5. **Run the matrix.** Planning cases score an answer plus a delivery plan.
    Implementation cases let the candidate edit code, then score it with the
    real fix's own tests, placed only after the candidate stops. Delivery modes:
@@ -101,11 +116,60 @@ How it works:
    rewrites its question against it. The hook is registered in the project's
    `.claude/settings.json`, so every checkout, machine and cloud session gets it.
 
-Raw rows and quotes stay on your machine; the PR carries counts and rule text.
+Raw rows and quotes are stored only on your machine; the classifier call sends
+excerpts to Anthropic (see below), and the PR carries counts and rule text.
 
 Requirements: Claude Code, Python 3.11+ or [uv](https://docs.astral.sh/uv/),
 `node`, and the `claude` CLI for the classifier. Start with
 `skills/engineering/questionnaire-review/SKILL.md`.
+
+## What it reads and where it sends data
+
+Nothing goes to me or to any server of mine, and there is no telemetry. Each
+step reads and writes only what its row says, and sends data only to the AI
+model you chose for that step, through your own
+`claude` or `codex` login or a gateway you configure. Those providers handle it
+under their own terms. A step that isn't listed reads only the files you pass
+it and sends nothing.
+
+### questionnaire-review
+
+| Step | Reads | Sends, and to whom | Writes |
+| --- | --- | --- | --- |
+| `questionnaires.py extract` | Claude Code session logs: `~/.claude/projects/**/*.jsonl`, or the folder given as `--projects` | Nothing | One row per question (the question, its options, your answer, timestamps) to the `--out` file |
+| `questionnaires.py classify` | Those rows | Anthropic, through `claude -p` with no tools (default model Claude Haiku), 25 questions per call: each question (first 600 characters), its options, which one was recommended, your answer (first 600 characters) and whether you took the recommendation | Labels to the `--labels` file |
+| `questionnaires.py stats`, `leads` | Rows and labels | Nothing | Standard output; `leads` replaces secret-shaped strings with `[redacted]` |
+| `decision-check.mjs` hook | The questionnaire Claude Code is about to show (the hook's input) and your checklist file | Nothing over the network. The denial returns the checklist to Claude, so its text becomes part of that conversation | A marker holding a timestamp and the tool call id in the system temp folder (`DECISION_CHECK_STATE_DIR` changes it); the retry removes it |
+
+The hook runs only in a project where you copied it and registered it in
+`.claude/settings.json`
+([setup](skills/engineering/questionnaire-review/references/setup.md));
+installing the plugin doesn't register it.
+
+### agent-eval
+
+| Step | Reads | Sends, and to whom | Writes |
+| --- | --- | --- | --- |
+| `mine_corrections.py extract` | Logs of the Claude Code projects named with `--claude-project`; with `--codex-home`, Codex sessions (`<codex-home>/sessions/**/rollout-*.jsonl`) whose working directory starts with `--codex-cwd` | Nothing | Each message you typed after an agent turn (first 4,000 characters), the end of that agent turn (last 1,500) and your previous message (first 600), to the `--out` file |
+| `mine_corrections.py classify` | Those messages | The classifier you pick, 20 messages per call: Anthropic through `claude -p` with no tools (default, Claude Haiku), or OpenAI through `codex exec` in read-only mode (`--classifier codex:<model>`). Per message: your text (first 1,500 characters), the end of the agent turn (last 1,200) and your previous message (first 600) | Labels to the `--labels` file |
+| `find_snapshot.py` | A checkout's git reflog | Nothing | Standard output |
+| `picker_page.py`, `review_page.py` | Candidate and case files | Nothing. The pages they write load the IBM Plex fonts from Google Fonts when you open them | An HTML page |
+| `evalkit.py run`, `adopt`, `judge`, `calibrate` | The config, the cases, and your repository's tracked files at each case's commit (`git archive`) | The models in the config (candidates, reviewer, judges), through `claude` (Anthropic), `codex` (OpenAI) or the configured gateway. A candidate gets the case prompt (the messages, facts and attachments written in the case) and reads files from the snapshot; the reviewer gets the case and the candidate's answer; a judge gets the case, its Trap and rubric and the answer, plus the diff and test results for an implementation case. The gateway also gets the key that the config's `token_command` prints | Snapshots and each run's output under `scratch_root`; ledgers and reports under `results_dir` |
+| `evalkit.py check-isolation`, `calibrate-tests`, `recompute`, `report`, `text` | The config, cases, snapshots and results | Nothing | Files under `scratch_root` and `results_dir`, reports |
+
+A Codex model and an implementation run start with a minimal environment:
+`PATH`, the gateway key, and `HOME` and `TMPDIR` inside the run's folder. A
+Claude planning run or Claude judge keeps your environment minus
+`ANTHROPIC_API_KEY` and the variables that start with the config's
+`forbidden_env_prefixes` (by default `GH_`, `GITHUB_`, `OP_`, `AWS_` and
+`SSH_AUTH_SOCK`), so it can use your `claude` login. `uv` downloads Python 3.11
+or later if your machine has none; the scripts import only the standard library.
+
+## Privacy and support
+
+[PRIVACY.md](PRIVACY.md) is the privacy policy. Questions and problems:
+[GitHub issues](https://github.com/luoy2/skills/issues). Security problems:
+[report privately](https://github.com/luoy2/skills/security/advisories/new).
 
 ## License
 

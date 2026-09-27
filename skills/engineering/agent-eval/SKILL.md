@@ -78,16 +78,16 @@ look up.
 S=<the directory of this SKILL.md, wherever it was installed>
 cp $S/assets/config.example.json agent-eval/config.json   # then edit
 K=$S/scripts/evalkit.py
-uv run --script $K --config agent-eval/config.json check-isolation --case <case>
-uv run --script $K --config agent-eval/config.json calibrate --batch b1
-uv run --script $K --config agent-eval/config.json run --batch b1 --parallel 6
-uv run --script $K --config agent-eval/config.json judge --batch b1 --parallel 6
-uv run --script $K --config agent-eval/config.json report --batch b1
+uv run --locked --script $K --config agent-eval/config.json check-isolation --case <case>
+uv run --locked --script $K --config agent-eval/config.json calibrate --batch b1
+uv run --locked --script $K --config agent-eval/config.json run --batch b1 --parallel 6
+uv run --locked --script $K --config agent-eval/config.json judge --batch b1 --parallel 6
+uv run --locked --script $K --config agent-eval/config.json report --batch b1
 # implementation cases (config `implement`): hidden tests must calibrate first
-uv run --script $K --config agent-eval/config.json calibrate-tests --case <impl case>
-uv run --script $K --config agent-eval/config.json run --batch i1 --cases <impl case> --budget 300
+uv run --locked --script $K --config agent-eval/config.json calibrate-tests --case <impl case>
+uv run --locked --script $K --config agent-eval/config.json run --batch i1 --cases <impl case> --budget 300
 # forced adoption of earlier reviews, cheap follow-up:
-uv run --script $K --config agent-eval/config.json adopt --batch b2 --from-batch b1 --efforts high --repeats 2
+uv run --locked --script $K --config agent-eval/config.json adopt --batch b2 --from-batch b1 --efforts high --repeats 2
 ```
 
 Requirements: macOS `sandbox-exec` for Codex isolation, the `claude` and `codex`

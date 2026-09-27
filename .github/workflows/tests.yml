@@ -15,4 +15,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: uv run --python 3.12 --with pytest python -m pytest -q tests
+      - run: uvx --python 3.12 pytest==9.1.1 -q tests

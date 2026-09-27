@@ -9,7 +9,7 @@
     {
       "name": "luoy2-skills",
       "source": "./",
-      "description": "Agent skills from real engineering work: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow.",
+      "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow. Both read your local session logs.",
       "category": "engineering",
       "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules"]
     }
