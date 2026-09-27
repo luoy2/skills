@@ -15,4 +15,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # tests/integration/ holds the cases that start a process (git, grep, node or a child
+      # python); the rest run in one process. This job runs both.
       - run: uvx --python 3.12 pytest==9.1.1 -q tests
