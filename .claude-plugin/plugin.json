@@ -8,6 +8,7 @@
   },
   "repository": "https://github.com/luoy2/skills",
   "license": "MIT",
+  "privacyPolicyUrl": "https://github.com/luoy2/skills/blob/main/PRIVACY.md",
   "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules"],
   "skills": [
     "./skills/engineering/agent-eval",

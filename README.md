@@ -167,7 +167,7 @@ or later if your machine has none; the scripts import only the standard library.
 
 ## Privacy and support
 
-[PRIVACY.md](PRIVACY.md) is the privacy policy. Questions and problems:
+[Privacy policy](https://github.com/luoy2/skills/blob/main/PRIVACY.md). Questions and problems:
 [GitHub issues](https://github.com/luoy2/skills/issues). Security problems:
 [report privately](https://github.com/luoy2/skills/security/advisories/new).
 
