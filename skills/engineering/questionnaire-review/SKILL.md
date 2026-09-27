@@ -34,10 +34,12 @@ describes, and ship them in the same PR as the first rules.
 3. **Numbers.** Run `scripts/questionnaires.py` (`--help` lists the options):
    - `extract --since <window start> --out <private>/rows.jsonl`
    - `classify --rows … --labels …`: a small model labels the recommended
-     action, the chosen action and the theme of each override. Rerun until it
-     reports nothing unlabelled.
+     action, the chosen action and the theme of each override. It exits 1 while
+     anything is unlabelled, a failed batch included; rerun it, and report what
+     the model still skips after a rerun as unlabelled.
    - `stats --rows … --labels … --split <previous round's merge time>`
-   - `leads --rows … --labels …`
+   - `leads --rows … --labels …`, with `--tz <zone>` when the owner reads dates
+     in another time zone than this machine's
 4. **Read every lead in full**: each changed answer, own answer and declined
    questionnaire. The labels sort the leads; they do not replace reading them.
    Group the overrides into themes, each with a count and dated examples in the

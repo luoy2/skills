@@ -140,3 +140,35 @@ def test_labels_line_up_with_the_ids_asked_and_a_rerun_skips_labelled(qr, rows, 
     qr.main(["classify", "--rows", str(path), "--labels", str(labels), "--batch", "10", "--parallel", "1"])
     assert calls == [["a#0", "a#1", "b#0"]]
     assert sorted(label["id"] for label in qr.read_jsonl(labels)) == ["a#0", "a#1", "b#0"]
+
+
+def test_a_failed_batch_counts_as_unlabelled_and_fails_the_run(qr, rows, monkeypatch, tmp_path, capsys):
+    _, path = rows
+
+    def unavailable(model, prompt, timeout):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(qr, "run_claude", unavailable)
+    labels = tmp_path / "labels.jsonl"
+    with pytest.raises(SystemExit) as stopped:
+        qr.main(["classify", "--rows", str(path), "--labels", str(labels), "--batch", "2", "--parallel", "1"])
+    assert stopped.value.code == 1
+    captured = capsys.readouterr()
+    assert "labelled 0 of 3; cost $0.00; unlabelled 3 (2 of 2 batches failed)" in captured.out
+    assert "batch failed: model unavailable" in captured.err
+    assert qr.read_jsonl(labels) == []
+
+
+def test_leads_print_dates_in_the_named_time_zone(qr, rows, capsys):
+    _, path = rows
+    qr.main(["leads", "--rows", str(path), "--tz", "America/New_York"])
+    out = capsys.readouterr().out
+    assert "[09-19 20:00]" in out and "[09-19 21:00]" in out  # asked 00:00Z and 01:00Z on 09-20
+
+
+def test_a_zone_this_system_cannot_load_prints_utc_and_says_so(qr, rows, capsys):
+    _, path = rows
+    qr.main(["leads", "--rows", str(path), "--tz", "Not/AZone"])
+    captured = capsys.readouterr()
+    assert "[09-20 00:00Z]" in captured.out
+    assert "time zone Not/AZone unavailable here" in captured.err

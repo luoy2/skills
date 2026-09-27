@@ -12,10 +12,10 @@ has a small model label what each recommended option does and, for an overridden
 one, what the owner chose instead: a judgment about meaning, so no keyword list
 decides it. `stats` counts; `leads` prints the overridden questions to read in full.
 
-    questionnaires.py extract --since 2026-09-13T04:00:00Z [--until ...] [--projects ~/.claude/projects] --out rows.jsonl
+    questionnaires.py extract --since 2026-01-01T00:00:00Z [--until ...] [--projects ~/.claude/projects] --out rows.jsonl
     questionnaires.py classify --rows rows.jsonl --labels labels.jsonl [--classifier claude:claude-haiku-4-5] [--batch 25] [--parallel 4]
-    questionnaires.py stats --rows rows.jsonl [--labels labels.jsonl] [--split 2026-09-24T13:35:35Z]
-    questionnaires.py leads --rows rows.jsonl [--labels labels.jsonl]
+    questionnaires.py stats --rows rows.jsonl [--labels labels.jsonl] [--split 2026-01-15T00:00:00Z]
+    questionnaires.py leads --rows rows.jsonl [--labels labels.jsonl] [--tz America/New_York]
 
 Rows carry the owner's words and the agents' text: keep them in a private directory,
 never in the repository. `leads` masks secret-shaped strings before printing.
@@ -30,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 RECOMMENDED = re.compile(r"[(（]\s*(?:recommended|推荐)\s*[)）]\s*$", re.IGNORECASE)
@@ -267,20 +267,26 @@ def cmd_classify(args):
     done = {label["id"] for label in read_jsonl(args.labels)}
     todo = [r for r in read_jsonl(args.rows) if r["kind"] in ANSWERED and r["recommended"] and not r["multi"] and r["id"] not in done]
     batches = [todo[i:i + args.batch] for i in range(0, len(todo), args.batch)]
-    spent, missing = 0.0, []
+    spent, missing, failed = 0.0, [], 0
     call = lambda prompt: run_claude(model, prompt, args.timeout)  # noqa: E731
     with open(args.labels, "a", encoding="utf-8") as out, concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
-        for future in concurrent.futures.as_completed([pool.submit(label_batch, call, b, args.classifier) for b in batches]):
+        pending = {pool.submit(label_batch, call, b, args.classifier): b for b in batches}
+        for future in concurrent.futures.as_completed(pending):
             try:
                 labels, cost, skipped = future.result()
-            except Exception as error:  # a failed batch stays unlabelled; a rerun retries it
+            except Exception as error:  # the whole batch stays unlabelled; a rerun retries it
                 print(f"batch failed: {error}", file=sys.stderr)
+                failed += 1
+                missing += [row["id"] for row in pending[future]]
                 continue
             out.writelines(json.dumps(label, ensure_ascii=False) + "\n" for label in labels)
             out.flush()
             spent += cost or 0.0
             missing += skipped
-    print(f"labelled {len(todo) - len(missing)} of {len(todo)}; cost ${spent:.2f}; unlabelled {len(missing)}")
+    failures = f" ({failed} of {len(batches)} batches failed)" if failed else ""
+    print(f"labelled {len(todo) - len(missing)} of {len(todo)}; cost ${spent:.2f}; unlabelled {len(missing)}{failures}")
+    if missing:
+        raise SystemExit(1)
 
 
 def share(counter, key, total):
@@ -343,14 +349,27 @@ def mask(text):
     return SECRET.sub("[redacted]", text or "")
 
 
-def local_date(ts):
-    """The owner reads dates in their own time zone: the machine's local one."""
-    return parse_ts(ts).astimezone().strftime("%m-%d %H:%M")
+def date_format(tz):
+    """Dates in the owner's time zone: the one `--tz` names, else this machine's.
+
+    A zone this system cannot load (Windows without the tzdata package) prints UTC,
+    marked Z, and says so once.
+    """
+    if not tz:
+        return lambda ts: parse_ts(ts).astimezone().strftime("%m-%d %H:%M")
+    try:
+        from zoneinfo import ZoneInfo
+        zone = ZoneInfo(tz)
+    except Exception as error:
+        print(f"time zone {tz} unavailable here ({error}); dates print in UTC, marked Z", file=sys.stderr)
+        return lambda ts: parse_ts(ts).astimezone(timezone.utc).strftime("%m-%d %H:%MZ")
+    return lambda ts: parse_ts(ts).astimezone(zone).strftime("%m-%d %H:%M")
 
 
 def cmd_leads(args):
     rows = read_jsonl(args.rows)
     labels = {label["id"]: label for label in read_jsonl(args.labels)} if args.labels else {}
+    local_date = date_format(args.tz)
     for row in rows:
         if row["kind"] not in ("changed", "own", "declined"):
             continue
@@ -369,7 +388,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     ex = sub.add_parser("extract")
-    ex.add_argument("--since", required=True, help="ISO UTC timestamp, e.g. 2026-09-13T04:00:00Z")
+    ex.add_argument("--since", required=True, help="ISO UTC timestamp, e.g. 2026-01-01T00:00:00Z")
     ex.add_argument("--until", default="")
     ex.add_argument("--projects", default="~/.claude/projects")
     ex.add_argument("--out", required=True)
@@ -390,6 +409,7 @@ def main(argv=None):
     le = sub.add_parser("leads")
     le.add_argument("--rows", required=True)
     le.add_argument("--labels", default="")
+    le.add_argument("--tz", default="", help="IANA time zone for the dates, e.g. America/New_York; default: this machine's")
     le.set_defaults(func=cmd_leads)
     args = parser.parse_args(argv)
     args.func(args)

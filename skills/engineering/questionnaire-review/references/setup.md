@@ -22,7 +22,8 @@ Do this once per project, in the first round's PR.
    there; `assets/settings.example.json` shows the entry). Use exec form,
    `"command": "node"` with the script and checklist path in `"args"`: it runs
    without a shell, so `${CLAUDE_PROJECT_DIR}` needs no quoting and behaves the
-   same on Windows.
+   same on Windows. The owner sees the denial line too; add `"--lang", "zh"`
+   after the checklist path when the owner reads Chinese.
 3. Commit both.
 
 Why the project settings and not `~/.claude/settings.json`: user settings are

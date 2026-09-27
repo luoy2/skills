@@ -93,3 +93,16 @@ def test_a_failure_lets_the_questionnaire_through_and_says_why(tmp_path, broken)
     out = _run(_ask(), state, project)
     assert "hookSpecificOutput" not in out
     assert "questionnaire sent unchecked" in out["systemMessage"]
+
+
+@pytest.mark.parametrize("args", [(EXAMPLE_ARG, "--lang", "zh"), ("--lang=zh", EXAMPLE_ARG)])
+def test_the_lead_line_can_be_in_chinese(tmp_path, args):
+    reason = _run(_ask(), tmp_path, args=args)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert reason.startswith("发问卷前先按下面的清单逐条核对题干和推荐项，改好后重新发这份问卷；同一会话 10 分钟内的重发会放行。")
+    assert EXAMPLE.read_text(encoding="utf-8") in reason
+
+
+def test_an_unknown_language_lets_the_questionnaire_through_and_says_why(tmp_path):
+    out = _run(_ask(), tmp_path, args=(EXAMPLE_ARG, "--lang", "fr"))
+    assert "hookSpecificOutput" not in out
+    assert "unknown --lang fr" in out["systemMessage"] and "questionnaire sent unchecked" in out["systemMessage"]
