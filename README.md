@@ -68,6 +68,43 @@ Requirements: macOS (for `sandbox-exec`), [uv](https://docs.astral.sh/uv/), the
 gateway. Start with `skills/engineering/agent-eval/SKILL.md`; the agent walks
 you through scoping, case writing and the run.
 
+## questionnaire-review
+
+Claude Code agents ask you to decide through multiple-choice questionnaires,
+with one option marked recommended. Each time you pick something else, the
+agent's default judgment and yours differed, and those differences are not
+random: they cluster by what the recommendation does and by theme.
+`questionnaire-review` finds them in your session logs every two weeks and turns
+the recurring ones into rules you accept one by one.
+
+How it works:
+
+1. **Extract.** Every questionnaire and your answer come out of
+   `~/.claude/projects`: the options, which one was recommended, what you chose
+   or wrote instead, and how long you took to answer.
+2. **Label.** A small model (Claude Haiku by default) labels what each
+   recommended option does (act now, defer, keep the old path, hand you a manual
+   step, file a ticket, split the work, …) and, for an override, what you chose
+   and what the difference is about. The counting stays in the script.
+3. **Read and audit.** The agent reads every override and every answer you wrote
+   yourself, groups them into themes, and checks each theme against your
+   project's rules: covered, partly covered or missing, with file:line.
+4. **Report.** A page shows acceptance overall and by recommended action, the
+   themes with dated examples, and the change since the previous round's rules.
+5. **Decide.** One question per candidate rule. Accepted rules go into your
+   project's rules in one PR; declined ones are recorded so the next round skips
+   them.
+6. **Enforce.** The first round adds a short checklist and a PreToolUse hook:
+   before each questionnaire is shown, the agent gets the checklist back and
+   rewrites its question against it. The hook is registered in the project's
+   `.claude/settings.json`, so every checkout, machine and cloud session gets it.
+
+Raw rows and quotes stay on your machine; the PR carries counts and rule text.
+
+Requirements: Claude Code, Python 3.11+ or [uv](https://docs.astral.sh/uv/),
+`node`, and the `claude` CLI for the classifier. Start with
+`skills/engineering/questionnaire-review/SKILL.md`.
+
 ## License
 
 MIT

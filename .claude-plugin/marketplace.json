@@ -9,9 +9,9 @@
     {
       "name": "luoy2-skills",
       "source": "./",
-      "description": "Agent skills from real engineering work, starting with agent-eval: evaluate models and thinking effort on the mistakes your own agents made.",
+      "description": "Agent skills from real engineering work: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow.",
       "category": "engineering",
-      "keywords": ["engineering", "skills", "eval", "benchmark", "agents"]
+      "keywords": ["engineering", "skills", "eval", "benchmark", "agents", "questionnaire", "rules"]
     }
   ]
 }
