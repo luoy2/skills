@@ -3,6 +3,18 @@
 Agent skills from my own engineering work, straight from my `.claude` directory.
 They work with Claude Code and Codex.
 
+Both skills learn from your own session history, on your own computer, to help
+you work better with Claude Code: `agent-eval` finds which model and thinking
+effort avoid the mistakes your agents actually made, and `questionnaire-review`
+turns the way you answer your agents into rules they follow.
+
+Your session logs stay on your computer, and nothing is sent to me: the plugin
+has no server, account or telemetry. What leaves your computer is only what a
+step puts in a prompt for the AI model you choose (excerpts of your messages, or
+an eval case and the files the model reads), sent through your own `claude` or
+`codex` login like any prompt you type, or through your own model gateway if you
+set one. [Each step is listed below](#what-it-reads-and-where-it-sends-data).
+
 ## Install
 
 Claude Code:
@@ -59,12 +71,13 @@ How it works:
    `sandbox-exec`: outside the run's own folder it cannot read files under the
    config's `deny_roots` (by default `/Users`, `/Volumes` and `/private/tmp`)
    or write anywhere but the system temp folders. It can still use the network.
-   A planning Claude run gets read-only tools on the snapshot. Implementation runs turn off the candidate's permission prompts so
-   it can edit the snapshot (Claude `--dangerously-skip-permissions`, Codex
-   `danger-full-access`); they always run inside `sandbox-exec`, and the kit
-   refuses to start a write-capable Claude that isn't. Both judges (from
-   different vendors) must fail the original wrong answer and pass the answer
-   you accepted before any model is scored.
+   A planning Claude run gets read-only tools on the snapshot. Implementation
+   runs turn off the candidate's permission prompts so it can edit the snapshot
+   (Claude `--dangerously-skip-permissions`, Codex `danger-full-access`); they
+   always run inside `sandbox-exec`, and the kit refuses to start a
+   write-capable Claude that isn't. Both judges (from different vendors) must
+   fail the original wrong answer and pass the answer you accepted before any
+   model is scored.
 5. **Run the matrix.** Planning cases score an answer plus a delivery plan.
    Implementation cases let the candidate edit code, then score it with the
    real fix's own tests, placed only after the candidate stops. Delivery modes:
@@ -81,9 +94,10 @@ report and page string comes from one text table; to run in another language,
 name a translated table as `text` in the config.
 
 Requirements: macOS (for `sandbox-exec`), [uv](https://docs.astral.sh/uv/), the
-`claude` and `codex` CLIs with native logins, or an OpenAI/Anthropic-compatible
-gateway. Start with `skills/engineering/agent-eval/SKILL.md`; the agent walks
-you through scoping, case writing and the run.
+`claude` and `codex` CLIs with native logins, or your own
+OpenAI/Anthropic-compatible gateway. Start with
+`skills/engineering/agent-eval/SKILL.md`; the agent walks you through scoping,
+case writing and the run.
 
 ## questionnaire-review
 
@@ -125,12 +139,19 @@ Requirements: Claude Code, Python 3.11+ or [uv](https://docs.astral.sh/uv/),
 
 ## What it reads and where it sends data
 
-Nothing goes to me or to any server of mine, and there is no telemetry. Each
-step reads and writes only what its row says, and sends data only to the AI
-model you chose for that step, through your own
-`claude` or `codex` login or a gateway you configure. Those providers handle it
-under their own terms. A step that isn't listed reads only the files you pass
-it and sends nothing.
+Your session logs stay on your computer, and nothing goes to me: the plugin has
+no server, account or telemetry. A step that calls an AI model puts only what
+its row lists into the prompt, and sends it only to the model you chose for that
+step, through your own `claude` or `codex` login. Those providers handle it
+under their own terms, as they do your other prompts.
+
+agent-eval can also send its model calls through a gateway. It is off unless
+your config sets `gateway`, and it is meant for a model proxy you run or use
+yourself, for example when you reach some models only through one. The plugin
+never supplies a gateway address.
+
+Each step reads and writes only what its row says. A step that isn't listed
+reads only the files you pass it and sends nothing.
 
 ### questionnaire-review
 
@@ -154,11 +175,12 @@ installing the plugin doesn't register it.
 | `mine_corrections.py classify` | Those messages | The classifier you pick, 20 messages per call: Anthropic through `claude -p` with no tools (default, Claude Haiku), or OpenAI through `codex exec` in read-only mode (`--classifier codex:<model>`). Per message: your text (first 1,500 characters), the end of the agent turn (last 1,200) and your previous message (first 600) | Labels to the `--labels` file |
 | `find_snapshot.py` | A checkout's git reflog | Nothing | Standard output |
 | `picker_page.py`, `review_page.py` | Candidate and case files | Nothing. The pages they write load the IBM Plex fonts from Google Fonts when you open them | An HTML page |
-| `evalkit.py run`, `adopt`, `judge`, `calibrate` | The config, the cases, and your repository's tracked files at each case's commit (`git archive`) | The models in the config (candidates, reviewer, judges), through `claude` (Anthropic), `codex` (OpenAI) or the configured gateway. A candidate gets the case prompt (the messages, facts and attachments written in the case) and reads files from the snapshot; the reviewer gets the case and the candidate's answer; a judge gets the case, its Trap and rubric and the answer, plus the diff and test results for an implementation case. The gateway also gets the key that the config's `token_command` prints | Snapshots and each run's output under `scratch_root`; ledgers and reports under `results_dir` |
+| `evalkit.py run`, `adopt`, `judge`, `calibrate` | The config, the cases, and your repository's tracked files at each case's commit (`git archive`) | The models in the config (candidates, reviewer, judges), through `claude` (Anthropic), `codex` (OpenAI) or, if you set one, your own gateway. A candidate gets the case prompt (the messages, facts and attachments written in the case) and reads files from the snapshot; the reviewer gets the case and the candidate's answer; a judge gets the case, its Trap and rubric and the answer, plus the diff and test results for an implementation case. Your gateway also gets the key that your `token_command` prints | Snapshots and each run's output under `scratch_root`; ledgers and reports under `results_dir` |
 | `evalkit.py check-isolation`, `calibrate-tests`, `recompute`, `report`, `text` | The config, cases, snapshots and results | Nothing | Files under `scratch_root` and `results_dir`, reports |
 
 A Codex model and an implementation run start with a minimal environment:
-`PATH`, the gateway key, and `HOME` and `TMPDIR` inside the run's folder. A
+`PATH`, your gateway key if you use one, and `HOME` and `TMPDIR` inside the
+run's folder. A
 Claude planning run or Claude judge keeps your environment minus
 `ANTHROPIC_API_KEY` and the variables that start with the config's
 `forbidden_env_prefixes` (by default `GH_`, `GITHUB_`, `OP_`, `AWS_` and

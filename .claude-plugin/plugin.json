@@ -1,6 +1,6 @@
 {
   "name": "luoy2-skills",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow. Both read your local session logs.",
   "author": {
     "name": "luoy2",

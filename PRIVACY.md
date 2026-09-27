@@ -3,6 +3,10 @@
 This policy covers the luoy2-skills plugin: the `agent-eval` and
 `questionnaire-review` skills in this repository.
 
+In short: the skills use your own session history, on your own computer, to help
+you work better with Claude Code. Your session logs stay on your computer, and
+nothing is sent to the author.
+
 ## What the author collects
 
 Nothing. The plugin has no server, account, analytics or telemetry, and none of
@@ -21,15 +25,18 @@ its scripts sends anything to the author.
 
 ## Where data is sent
 
-Only to the AI model providers you choose for a step, through your own `claude`
-or `codex` login or a gateway you configure:
+A step that calls an AI model puts only what the README lists for that step into
+the prompt, and sends it only to the provider you choose for that step, through
+your own login:
 
 - Anthropic, through the `claude` CLI: the questionnaire classifier, agent-eval's
   classifier (by default), and Claude candidates and judges.
 - OpenAI, through the `codex` CLI: agent-eval's classifier when you choose
   `codex:<model>`, and Codex candidates, reviewer and judges.
-- A gateway set in agent-eval's config: the prompts of the models routed through
-  it, and the key that the config's `token_command` prints.
+- Your own model gateway, only if you set `gateway` in agent-eval's config. It
+  is off by default, and the plugin supplies no gateway address. It receives the
+  prompts of the models routed through it and the key that your `token_command`
+  prints.
 
 The README's section "What it reads and where it sends data" lists what each
 call contains. Those providers handle the data under their own terms and privacy
