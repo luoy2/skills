@@ -2,7 +2,8 @@
 
 Token attribution, list-price cost, the isolation check and run validity produce no
 error when they are wrong; they produce a plausible number or a passing check. Each
-test here names the wrong number or the missed leak it would let through.
+test here names the wrong number or the missed leak it would let through. The isolation
+cases that scan a run root with grep are in tests/integration/test_evalkit_planning_integration.py.
 """
 
 from __future__ import annotations
@@ -162,27 +163,6 @@ def _root(tmp_path):
         (tmp_path / sub).mkdir()
     (tmp_path / "wt" / "AGENTS.md").write_text("# entry\n")
     return tmp_path
-
-
-def test_a_planted_answer_in_the_home_fails_the_check(kit, tmp_path):
-    root = _root(tmp_path)
-    (root / "home" / "notes.md").write_text("the fix is to rotate the ledger\n")
-    failures = kit.isolation_check(root, ["rotate the ledger"], "prompt", {}, "claude", "native",
-                                   argv=kit.claude_argv("m", "high"))
-    assert any("leak markers" in f and "notes.md" in f for f in failures), failures
-
-
-def test_a_clean_root_passes(kit, tmp_path):
-    root = _root(tmp_path)
-    assert kit.isolation_check(root, ["rotate the ledger"], "prompt", {}, "claude", "native",
-                               argv=kit.claude_argv("m", "high")) == []
-
-
-def test_a_marker_inside_the_prompt_fails_the_check(kit, tmp_path):
-    root = _root(tmp_path)
-    failures = kit.isolation_check(root, ["#1234"], "see #1234", {}, "claude", "native",
-                                   argv=kit.claude_argv("m", "high"))
-    assert any("<prompt>" in f for f in failures)
 
 
 @pytest.mark.parametrize("key", ["GH_TOKEN", "GITHUB_TOKEN", "OP_SERVICE_ACCOUNT_TOKEN", "AWS_PROFILE",

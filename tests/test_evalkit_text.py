@@ -4,14 +4,14 @@ A text file replaces the whole table, for example with a translation; a missing 
 entry is an error, so one language never shows up inside another. Candidate, reviewer and
 judge entries are experiment inputs: every ledger row records their digest, and a batch
 refuses new rows on another text, so one batch never compares candidates across two prompts.
+The cases that run a script in a child interpreter are in
+tests/integration/test_evalkit_text_integration.py.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -97,28 +97,3 @@ def test_a_batch_written_on_another_text_refuses_new_rows(tmp_path, monkeypatch,
         kit.RecordWriter(tmp_path / batch / ledger, stamp=False).append(row)
         with pytest.raises(kit.EvalError, match="0123456789ab" if batch == "other" else "none"):
             kit.check_batch_text(batch)
-
-
-def test_owner_pages_speak_the_configured_language(tmp_path):
-    kit = fresh_kit()
-    config = _config(tmp_path, _marked(kit))
-    candidates = tmp_path / "candidates.json"
-    candidates.write_text(json.dumps({"pick": 1, "candidates": [{"id": "c1", "title": "t", "task": "x", "wrong": "y",
-                                                                  "fix": "%%not.a.key%%", "right": "z"}]}),
-                          encoding="utf-8")
-    picker = SKILL / "scripts" / "picker_page.py"
-    for extra, lede in (([], kit.TEXT_EN["picker.lede"]), (["--config", str(config)], "X·" + kit.TEXT_EN["picker.lede"])):
-        out = tmp_path / "picker.html"
-        subprocess.run([sys.executable, str(picker), str(candidates), "--out", str(out), *extra], check=True,
-                       capture_output=True)
-        page = out.read_text(encoding="utf-8")
-        assert f'<p class="lede">{lede}</p>' in page
-        assert "%%not.a.key%%" in page  # case data is never read as a placeholder
-        assert page.count("%%") == 2
-
-
-def test_the_text_command_prints_the_table_to_translate(tmp_path):
-    kit = fresh_kit()
-    out = subprocess.run([sys.executable, str(KIT_PATH), "--config", str(tmp_path / "absent.json"), "text"],
-                         check=True, capture_output=True, text=True).stdout
-    assert json.loads(out) == kit.TEXT_EN
