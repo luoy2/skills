@@ -2,15 +2,15 @@
 
 | What happened | How it showed | What prevents it |
 |---|---|---|
-| Snapshot SHA guessed from time | 2 of 3 cases would have used the wrong commit | `find_snapshot.py` on the checkout's reflog |
+| Snapshot SHA guessed from time | Most cases would have used the wrong commit | `find_snapshot.py` on the checkout's reflog |
 | Attachment was an untracked draft since deleted | Could not rebuild the case from git | Restore from the transcript's Read result |
 | Attachment header explained the case | Hint visible to candidates | Strip authoring notes from attachments |
 | Your own memory notes contained the answers | Leak into any unisolated run | Isolation denies the whole home tree; leak markers include eval-internal names |
 | Codex sandbox denied all reads under /private/tmp | Codex aborted at start (`exit -6`, canonicalize CODEX_HOME) | Deny `file-read-data`, not `file-read*` |
 | Codex read-only sandbox still reads everything | Candidate read scratch notes with the answer | Wrap Codex in `sandbox-exec` |
-| Snapshots never removed (340 MB each) | Disk full at 109 runs; runner crashed with ENOSPC | Runner deletes `wt/` per run; monitor free disk |
-| Fresh CODEX_HOME unpacks ~90 MB `.tmp` | 20 GB of judge dirs in an evening | Runner deletes `.tmp` and judge workdirs |
-| Codex subagents write separate rollouts | Cost under-counted 2–4× on ultra runs; false effort mismatch | Bill every rollout; effort from the main thread; `recompute` |
+| Snapshots never removed (a full checkout each) | Disk full partway through the batch; runner crashed with ENOSPC | Runner deletes `wt/` per run; monitor free disk |
+| Fresh CODEX_HOME unpacks a large `.tmp` | Tens of GB of judge dirs in one evening | Runner deletes `.tmp` and judge workdirs |
+| Codex subagents write separate rollouts | Cost under-counted several times over on high-effort runs; false effort mismatch | Bill every rollout; effort from the main thread; `recompute` |
 | Gateway did not serve the requested model | 429 cooling down / model absent | Probe each model before the batch; native fallback needs owner approval |
 | Pass condition too strict, no direction level | No candidate passed any Trap, so no signal | Two-level Trap |
 | An isolated planner named the fix's test file by the repository's convention | Every implementer sharing that plan was rejected on a leak marker | Leak-check the task prompt alone; record marker hits in the plan |

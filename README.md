@@ -61,7 +61,9 @@ How it works:
    reviewer and any subagents the candidate spawned.
 
 To measure an instruction change, set `overlay_dir`: the same cases rerun with
-your new `AGENTS.md` or SOP files laid over the old snapshots.
+your new `AGENTS.md` or SOP files laid over the old snapshots. Every prompt,
+report and page string comes from one text table; to run in another language,
+name a translated table as `text` in the config.
 
 Requirements: macOS (for `sandbox-exec`), [uv](https://docs.astral.sh/uv/), the
 `claude` and `codex` CLIs with native logins, or an OpenAI/Anthropic-compatible

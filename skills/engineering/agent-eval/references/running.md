@@ -86,6 +86,9 @@ output is not measuring the model.
 - Codex candidates may spawn subagents; each writes its own rollout. The runner
   bills every rollout and judges effort by the main thread only. After any change
   to usage accounting, `recompute --batch <b>` re-derives cost and validity from
-  the saved rollouts.
+  the saved rollouts. It covers planning batches; an implementation batch is
+  refused untouched, since its cost includes the shared plan and its validity the
+  hidden tests.
 - Quota or crashes mid-batch: rerun `run` (valid runs are skipped), then
-  `recompute`, `judge` (skips done judgments), `report`.
+  `recompute`, `judge` (skips done judgments), `report`. A batch runs on one text:
+  after the prompts change, even by a word, start a new batch.

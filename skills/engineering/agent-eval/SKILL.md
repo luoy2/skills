@@ -75,16 +75,17 @@ look up.
 ## Running the kit
 
 ```bash
-cp .claude/skills/agent-eval/assets/config.example.json agent-eval/config.json   # then edit
-K=.claude/skills/agent-eval/scripts/evalkit.py
-uv run --script $K --config agent-eval/config.json check-isolation --case I
+S=<the directory of this SKILL.md, wherever it was installed>
+cp $S/assets/config.example.json agent-eval/config.json   # then edit
+K=$S/scripts/evalkit.py
+uv run --script $K --config agent-eval/config.json check-isolation --case <case>
 uv run --script $K --config agent-eval/config.json calibrate --batch b1
 uv run --script $K --config agent-eval/config.json run --batch b1 --parallel 6
 uv run --script $K --config agent-eval/config.json judge --batch b1 --parallel 6
 uv run --script $K --config agent-eval/config.json report --batch b1
 # implementation cases (config `implement`): hidden tests must calibrate first
-uv run --script $K --config agent-eval/config.json calibrate-tests --case W
-uv run --script $K --config agent-eval/config.json run --batch i1 --cases W --budget 300
+uv run --script $K --config agent-eval/config.json calibrate-tests --case <impl case>
+uv run --script $K --config agent-eval/config.json run --batch i1 --cases <impl case> --budget 300
 # forced adoption of earlier reviews, cheap follow-up:
 uv run --script $K --config agent-eval/config.json adopt --batch b2 --from-batch b1 --efforts high --repeats 2
 ```
@@ -93,9 +94,17 @@ Requirements: macOS `sandbox-exec` for Codex isolation, the `claude` and `codex`
 CLIs, and either native logins or a gateway (`gateway` in the config). Cases,
 config and results can live anywhere; set the paths in the config.
 
+Every string that candidates, the reviewer, the judges and the owner read (prompts,
+reports, both pages) is in one text table. For another language, write the whole
+table as JSON (`evalkit.py text` prints it) and name the file as `text` in the
+config; the page scripts follow it with `--config`. The candidate, reviewer and
+judge entries are experiment inputs: every ledger row records their digest, and
+`run`, `adopt`, `judge` and `calibrate` refuse a batch written on another text,
+so a changed prompt starts a new batch.
+
 ## Before you trust a number
 
 Read `references/pitfalls.md` once per eval. Each item there cost a real batch:
-a disk filled by unremoved snapshots, subagent tokens missed so cost was 3×
-too low, an effort mismatch that was really a subagent, a Trap no model could
+a disk filled by unremoved snapshots, subagent tokens missed so cost was
+several times too low, an effort mismatch that was really a subagent, a Trap no model could
 pass, and a "review is useless" conclusion the raw answers contradicted.

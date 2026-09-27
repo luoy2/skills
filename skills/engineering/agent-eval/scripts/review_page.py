@@ -28,7 +28,7 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--cases")
-    ap.add_argument("--title", default="Review eval cases")
+    ap.add_argument("--title")
     args = ap.parse_args()
     kit = load_kit()
     kit.configure(args.config)
@@ -39,9 +39,9 @@ def main():
         row = {k: v for k, v in case.items() if k != "dir"}
         row["prompt"] = kit.build_prompt(case, common)
         data["cases"].append(row)
-    template = (HERE.parent / "assets" / "review_template.html").read_text(encoding="utf-8")
-    page = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
-    page = page.replace("__TITLE__", args.title)
+    template = kit.fill_text((HERE.parent / "assets" / "review_template.html").read_text(encoding="utf-8"))
+    page = template.replace("__TITLE__", args.title or kit.T["casepage.title"])
+    page = page.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
     Path(args.out).write_text(page, encoding="utf-8")
     print(args.out)
 

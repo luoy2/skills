@@ -235,3 +235,29 @@ def test_the_archived_report_names_the_overlaid_instruction_files(kit, monkeypat
     (tmp_path / "b" / "runs.jsonl").write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
     assert kit.summarize("b", {"W": case}, {"judges": []})[0]["overlay"] == {"AGENTS.md": "abc123"}
     assert "overlay_dir" not in kit.render_markdown("b", plain, {"W": case}, {"judges": []})
+
+
+def _review(run_id, case="I"):
+    return {"run_id": run_id, "case": case, "candidate": "sol", "effort": "high", "mode": "review", "status": "valid",
+            "draft": "draft", "stages": [{"stage": "review", "final": "review"}]}
+
+
+def test_repeated_review_sources_adopt_into_separate_runs(kit):
+    """Two repeats of one review arm used to share `…-adopt-r1`: one run directory, one ledger entry."""
+    runs = kit.adopt_runs([_review("I-sol-high-review-r1"), _review("I-sol-high-review-r2"),
+                           _review("H-sol-high-review", case="H")], None, None, 1)
+    assert [r["run_id"] for r in runs] == ["H-sol-high-adopt-r1", "I-sol-high-adopt-s1-r1", "I-sol-high-adopt-s2-r1"]
+    assert [r["source_run"] for r in runs] == ["H-sol-high-review", "I-sol-high-review-r1", "I-sol-high-review-r2"]
+
+
+def test_recompute_refuses_an_implementation_batch_and_leaves_it_untouched(kit, monkeypatch, tmp_path):
+    """Its cost and validity rules are the planning runner's; an implementation run would come back wrong."""
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    ledger = tmp_path / "i1" / "runs.jsonl"
+    ledger.parent.mkdir()
+    ledger.write_text(json.dumps({"run_id": "W-a-high-direct-r1", "kind": "implement", "status": "invalid",
+                                  "stages": [{"stage": "implement"}], "chain_cost_usd": 7.0}) + "\n", encoding="utf-8")
+    before = ledger.read_bytes()
+    with pytest.raises(kit.EvalError, match="planning runs only"):
+        kit.cmd_recompute(type("Args", (), {"batch": "i1"})())
+    assert ledger.read_bytes() == before

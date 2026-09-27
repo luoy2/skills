@@ -5,7 +5,7 @@ The checkout's own HEAD reflog is the evidence: the last move at or before the
 moment is the snapshot. The first-parent `origin/master` guess is printed only as
 a fallback and is often wrong (a checkout lags or leads the remote).
 
-    python find_snapshot.py --checkout ~/projects/myrepo --at 2026-09-23T16:37:43Z
+    python find_snapshot.py --checkout ~/projects/myrepo --at 2026-01-15T14:00:00Z
 """
 import argparse
 import datetime as dt
@@ -19,7 +19,7 @@ def parse(ts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkout", required=True)
-    ap.add_argument("--at", required=True, help="ISO time of the correction, e.g. 2026-09-23T16:37:43Z")
+    ap.add_argument("--at", required=True, help="ISO time of the correction, e.g. 2026-01-15T14:00:00Z")
     ap.add_argument("--remote-ref", default="refs/remotes/origin/master")
     args = ap.parse_args()
     at = parse(args.at)

@@ -1,5 +1,5 @@
 {
- "_note": "Copy to <repo>/agent-eval/config.json and edit. Relative paths resolve against this file's directory. Model ids and prices are examples; check list prices yourself and record the source in prices_note. gateway is optional: an OpenAI/Anthropic-compatible proxy; without it every candidate uses its native login.",
+ "_note": "Copy to <repo>/agent-eval/config.json and edit. Relative paths resolve against this file's directory. Model ids and prices are examples; check list prices yourself and record the source in prices_note. gateway is optional: an OpenAI/Anthropic-compatible proxy; without it every candidate uses its native login. text is optional: a JSON file that replaces the whole text table (`evalkit.py text` prints it), for example a translation.",
  "repo": "..",
  "cases_dir": "cases",
  "results_dir": "~/agent-eval-results",
@@ -274,5 +274,6 @@
    }
   ]
  },
- "overlay_dir": null
+ "overlay_dir": null,
+ "text": null
 }

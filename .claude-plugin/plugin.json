@@ -1,6 +1,6 @@
 {
   "name": "luoy2-skills",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Agent skills from real engineering work: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow.",
   "author": {
     "name": "luoy2",

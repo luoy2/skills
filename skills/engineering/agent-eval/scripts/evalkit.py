@@ -73,12 +73,183 @@ TEST_PYTHON = ""
 # Environment a candidate must never inherit: forge, vault, cloud and routing credentials.
 FORBIDDEN_ENV_PREFIXES = ("GH_", "GITHUB_", "OP_", "AWS_", "SSH_AUTH_SOCK")
 
+# Every string a candidate, the reviewer, a judge or the owner reads, by key. The config's
+# `text` names a JSON file that replaces the whole table, for example in another language;
+# `evalkit.py text` prints the table to start one from. Candidate, reviewer and judge entries
+# are experiment inputs: each ledger row records their digest, and a batch refuses rows on
+# another text (check_batch_text).
+TEXT_EN = {
+    "candidate.background": "Background:",
+    "candidate.attachment": "Attachment {name}",
+    "candidate.attachment_heading": "{label}:",
+    "candidate.owner": "The owner (verbatim, in order):",
+    "candidate.owner_message": "> {message}",
+    "candidate.interfaces": "The acceptance tests call the interfaces below; keep their names and signatures, the behaviour is yours to decide:",
+    "candidate.adopt": (
+        "\n\n=== Previous round ===\nBelow are the answer and plan you returned for this task last round, and a reviewer's comments on them. "
+        "Adopt every comment and return the complete revised answer and plan. You may decline a comment only by citing concrete "
+        "repository evidence (file and line) that it is wrong, and you must write that evidence down.\n\n"
+        "=== Your previous answer and plan ===\n{draft}\n\n=== Review ===\n{review}\n"),
+    "candidate.revise": (
+        "A reviewer commented on your answer and plan as below. Revise accordingly and return the complete "
+        "revised answer and plan; explain any comment you disagree with.\n\n=== Review ===\n{review}"),
+    "candidate.plan_heading": "=== Plan ===",
+    "reviewer.prompt": (
+        "You review this delivery plan. Below are the task given to a candidate agent and the answer and plan it returned. "
+        "You may read the repository. List factual errors, missed risks, what should be verified first and what could be "
+        "simpler, one point at a time, each with its evidence. Do not rewrite the plan for it.\n\n=== Task ===\n"
+        "{task}\n\n=== Candidate's answer and plan ===\n{draft}\n"),
+    "judge.prompt": (
+        "You are an eval judge. Below are an eval case, an anonymous candidate agent's tool-call trajectory and its final answer. "
+        "Judge only against the given pass conditions and rubric, item by item; do not grade style. Every verdict cites a "
+        "trajectory step number or the answer's own words as evidence; no evidence means fail. Equivalent approaches are "
+        "accepted as listed under 'Accepted equivalents'.\n\n"
+        "=== Case as the candidate saw it ===\n{prompt}\n\n"
+        "=== Trap (judged at two levels) ===\nThe original agent's mistake: {description}\n"
+        "direction (right way; only the direction of the recommended approach, details need not be complete): {direction}\n"
+        "pass (done right): {trap_pass}\n"
+        "If pass is true, direction is true.\n\n"
+        "=== Rubric (judge each) ===\n{items}\n\n=== Accepted equivalents ===\n{equivalents}\n\n"
+        "=== Candidate trajectory ===\n{trajectory}\n\n=== Candidate final answer ===\n{answer}\n\n"
+        "Output JSON: one trap entry (direction, pass, evidence) and one items entry per rubric id ({ids})."),
+    "judge.no_steps": "(no tool calls recorded)",
+    "judge.rubric_item": "- {id}: {text} (evidence: {evidence})",
+    "judge.diff_heading": "=== Candidate's changes (git diff against the snapshot, {files} files, +{added}/-{deleted}) ===",
+    "judge.diff_omitted": "\n(diff omitted for length: {files})",
+    "judge.no_changes": "(no changes)",
+    "report.md_title": "## Data: batch `{batch}`",
+    "report.md_intro": (
+        "{valid} valid runs, {invalid} invalid; run cost ${run_cost:.2f} (reviewer included; a shared plan counted once), "
+        "judging cost ${judge_cost:.2f}. Trap is shown as direction/pass: ✓ both judges pass, ✗ both fail, ? they disagree or "
+        "did not judge; rubric is the number of items both judges pass / total."),
+    "report.md_overlay": "Snapshot code unchanged; these instruction files were replaced by the overlay_dir versions: {files}.",
+    "report.list_sep": ", ",
+    "report.md_hidden": "{expected} hidden tests; the bare snapshot passes {baseline}.",
+    "report.impl_columns": ["Model", "effort", "Delivery", "Hidden tests (per run)", "Trap direction/pass", "Rubric",
+                            "Mean cost", "Mean time"],
+    "report.impl_html_columns": ["Model", "effort", "Delivery", "Hidden tests (per run)", "Mean pass rate",
+                                 "Trap direction/pass", "Rubric", "Diff +/-", "Mean cost", "Mean time"],
+    "report.plan_columns": ["Model", "effort", "Delivery", "Trap (draft)", "Rubric (draft)", "Trap (final)",
+                            "Rubric (final)", "Chain cost", "Time"],
+    "report.md_dispute_trap": "{run}: trap",
+    "report.md_dispute_target_trap": "{run} {target}: trap",
+    "report.same_as_draft": "= draft",
+    "report.md_disputes": "### Judge disagreements",
+    "report.md_invalid": "### Invalid runs",
+    "report.md_invalid_item": "- `{run}`: {reasons}",
+    "report.none": "none",
+    "report.impl_lede": (
+        "{expected} hidden tests; the bare snapshot passes {baseline} (the floor). Trap direction/pass and rubric count "
+        "only when both judges pass. Cost includes the full shared plan (split modes)."),
+    "report.html_dispute_trap": "{run}: trap",
+    "report.html_dispute_target_trap": "{run} {target}: trap",
+    "report.pass": "pass",
+    "report.fail": "fail",
+    "report.split_unjudged": "split/unjudged",
+    "report.split_items": "split {ids}",
+    "report.html_invalid_sep": ": ",
+    "report.title": "Agent eval report {batch}",
+    "report.heading": "Agent eval report · {batch}",
+    "report.font": "system-ui,sans-serif",
+    "report.lede": (
+        "Reference results; nothing here changes your agent configuration. Trap and rubric count only when both judges pass;\n"
+        "disagreements are listed for the owner to rule on. Cost is at list prices over the whole chain including reviewer and revision;\n"
+        "judging is not included. {valid} valid runs, {invalid} invalid."),
+    "report.disputes": "Disagreements for the owner to rule on",
+    "report.invalid": "Invalid runs",
+    "page.font": '"IBM Plex Sans",system-ui,sans-serif',
+    "page.copied": "Copied — paste it back into the chat",
+    "page.copy_by_hand": "Copy the box below by hand",
+    "picker.title": "Pick eval cases",
+    "picker.lede": (
+        "Each candidate is a moment in a real session where an agent went wrong and the owner corrected it. Tick the ones "
+        "to turn into eval cases, ideally of different error types, then press \"Copy selection\" at the bottom and paste it "
+        "back into the chat."),
+    "picker.copy": "Copy selection",
+    "picker.selection": "Selection",
+    "picker.recommended": "recommended",
+    "picker.task": "Original task",
+    "picker.wrong": "What went wrong",
+    "picker.fix": "Owner correction",
+    "picker.quote_open": "“",
+    "picker.quote_close": "”",
+    "picker.right": "Right direction",
+    "picker.snapshot": "snapshot",
+    "picker.selected": "{n} selected",
+    "picker.tag_sep": "; ",
+    "picker.picked": "Picked: ",
+    "picker.title_open": " (",
+    "picker.title_close": ")",
+    "picker.list_sep": ", ",
+    "casepage.title": "Review eval cases",
+    "casepage.lede": (
+        "One tab per case: the prompt the candidate sees, the two-level Trap and each rubric item. Mark every item agree / "
+        "change / drop, add a note to anything you change, then press \"Copy marks\" at the bottom and paste it back into "
+        "the chat. Marks are stored only in this browser."),
+    "casepage.copy": "Copy marks",
+    "casepage.marks": "Marks",
+    "casepage.evidence": "Evidence: ",
+    "casepage.agree": "agree",
+    "casepage.change": "change",
+    "casepage.drop": "drop",
+    "casepage.note": "Note (optional)",
+    "casepage.placed": "placed in snapshot at",
+    "casepage.inline": " (inline in the prompt)",
+    "casepage.item_sep": "; ",
+    "casepage.none": "none",
+    "casepage.snapshot": "Snapshot SHA",
+    "casepage.attachments": "Attachments",
+    "casepage.prompt_heading": "Prompt (everything the candidate sees)",
+    "casepage.prompt": "Prompt",
+    "casepage.prompt_check": "Is the prompt neutral, with no hint of the answer, and are any background facts missing?",
+    "casepage.impl_heading": "Implementation case: hidden tests and delivery modes",
+    "casepage.modes": "Delivery modes:",
+    "casepage.label_gap": " ",
+    "casepage.list_sep": ", ",
+    "casepage.hidden": "Hidden tests",
+    "casepage.hidden_where": " (invisible to the candidate, placed in the worktree after it finishes): ",
+    "casepage.hidden_count_before": ", ",
+    "casepage.hidden_count_after": " in total. ",
+    "casepage.tests_check": "Score implementations with these tests (passed / total)",
+    "casepage.trap_heading": "Trap (two levels, each pass/fail)",
+    "casepage.mistake": "The original mistake:",
+    "casepage.direction": "Direction",
+    "casepage.pass": "Pass",
+    "casepage.rubric_heading": "Rubric (each judged yes or no)",
+    "casepage.equivalents": "Accepted equivalents:",
+    "casepage.ask": "Your decision:",
+    "casepage.answer": "Answer",
+    "casepage.answer_hint": "agree = judge as drafted; otherwise write your ruling in the note",
+    "casepage.leak_heading": "Leak markers (must not appear in the snapshot or the prompt)",
+    "casepage.shared": "Shared rubric",
+    "casepage.count": "{done} / {total} marked · {edit} to change or drop",
+    "casepage.marks_heading": "Eval case review marks",
+    "casepage.unmarked": "unmarked",
+}
+EXPERIMENT_TEXT = ("candidate.", "reviewer.", "judge.")
+
+
+def text_digest(text):
+    """What candidates, the reviewer and the judges read, as one short hash."""
+    inputs = {k: v for k, v in text.items() if k.startswith(EXPERIMENT_TEXT)}
+    return hashlib.sha256(json.dumps(inputs, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+
+
+T = dict(TEXT_EN)
+TEXT_DIGEST = text_digest(T)
+KIT_DIGEST = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12]
+
+
+def fill_text(page):
+    """An owner page template with every %%key%% replaced by its text entry."""
+    return re.sub(r"%%([a-z]+\.[a-z_]+)%%", lambda m: T[m.group(1)], page)
+
 
 def configure(path):
     """Load the eval config; relative paths resolve against the config file's directory."""
     global CFG, REPO, CASES, RESULTS, SCRATCH_ROOT, CLAUDE_BIN, CODEX_BIN, GATEWAY_URL, \
         GATEWAY_TOKEN_COMMAND, GATEWAY_KEY_ENV, INSTRUCTIONS_FILE, DENY_ROOTS, FORBIDDEN_ENV_PREFIXES, \
-        ALLOW_READ, TEST_PYTHON, OVERLAY_DIR
+        ALLOW_READ, TEST_PYTHON, OVERLAY_DIR, T, TEXT_DIGEST
     path = Path(path).expanduser().resolve()
     CFG = json.loads(path.read_text(encoding="utf-8"))
     base = path.parent
@@ -106,6 +277,15 @@ def configure(path):
     ALLOW_READ = tuple(dict.fromkeys(q for p in iso.get("allow_read", [])
                                      for q in (os.path.expanduser(p), os.path.realpath(os.path.expanduser(p)))))
     TEST_PYTHON = os.path.expanduser((CFG.get("implement") or {}).get("test_python", ""))
+    T = dict(TEXT_EN)
+    if CFG.get("text"):
+        text_path = rel(CFG["text"])
+        loaded = json.loads(text_path.read_text(encoding="utf-8"))
+        missing, unknown = sorted(set(TEXT_EN) - set(loaded)), sorted(set(loaded) - set(TEXT_EN))
+        if missing or unknown:
+            raise EvalError(f"text {text_path}: missing {missing}, unknown {unknown}; `evalkit.py text` prints every entry")
+        T = loaded
+    TEXT_DIGEST = text_digest(T)
     for key in ("candidates", "modes", "reviewer", "judges", "prices"):
         if key not in CFG:
             raise EvalError(f"config {path} lacks '{key}'")
@@ -172,16 +352,17 @@ def expand_runs(cases, arms, modes=None, candidates=None, efforts=None, repeats=
 
 
 def build_prompt(case, common, suffix=None):
-    lines = ["Background:"]
+    lines = [T["candidate.background"]]
     lines += [f"{i}. {item}" for i, item in enumerate(case["background"], 1)]
     for att in case.get("attachments", []):
         if att.get("inline"):
             text = (case["dir"] / att["file"]).read_text(encoding="utf-8")
-            lines += ["", f"{att.get('label') or 'Attachment ' + Path(att['file']).name}:", text.strip()]
-    lines += ["", "The owner (verbatim, in order):"]
-    lines += [f"> {m}" for m in case["owner_messages"]]
+            label = att.get("label") or T["candidate.attachment"].format(name=Path(att["file"]).name)
+            lines += ["", T["candidate.attachment_heading"].format(label=label), text.strip()]
+    lines += ["", T["candidate.owner"]]
+    lines += [T["candidate.owner_message"].format(message=m) for m in case["owner_messages"]]
     if case.get("interface"):
-        lines += ["", "The acceptance tests call the interfaces below; keep their names and signatures, the behaviour is yours to decide:"]
+        lines += ["", T["candidate.interfaces"]]
         lines += [f"- {item}" for item in case["interface"]]
     if suffix is None:
         suffix = common["implement_suffix"] if case.get("kind") == "implement" else common["suffix"]
@@ -690,12 +871,7 @@ def run_reviewer(ctx, case_prompt, draft):
     rev, root, out = ctx["reviewer"], ctx["root"], ctx["out"]
     home = root / "reviewer-codex-home"
     write_codex_home(home, rev.get("client", "gateway"))
-    prompt = (
-        "You review this delivery plan. Below are the task given to a candidate agent and the answer and plan it returned. "
-        "You may read the repository. List factual errors, missed risks, what should be verified first and what could be "
-        "simpler, one point at a time, each with its evidence. Do not rewrite the plan for it.\n\n=== Task ===\n"
-        f"{case_prompt}\n\n=== Candidate's answer and plan ===\n{draft}\n"
-    )
+    prompt = T["reviewer.prompt"].format(task=case_prompt, draft=draft)
     argv = codex_argv(rev["model"], rev["effort"], ctx["profile"], root / "wt")
     env = codex_env(root, home, ctx["key"])
     proc = run_process(argv, prompt, root / "wt", env, ctx["timeout"],
@@ -774,17 +950,9 @@ def validity(record, cand, effort, tools=CLAUDE_TOOLS):
     return reasons
 
 
-ADOPT_INSTRUCTION = (
-    "\n\n=== Previous round ===\nBelow are the answer and plan you returned for this task last round, and a reviewer's comments on them. "
-    "Adopt every comment and return the complete revised answer and plan. You may decline a comment only by citing concrete "
-    "repository evidence (file and line) that it is wrong, and you must write that evidence down.\n\n"
-    "=== Your previous answer and plan ===\n{draft}\n\n=== Review ===\n{review}\n"
-)
-
-
 def adopt_prompt_extra(draft, review):
     """Forced adoption: the author may reject a review point only with repository evidence."""
-    return ADOPT_INSTRUCTION.format(draft=draft, review=review)
+    return T["candidate.adopt"].format(draft=draft, review=review)
 
 
 def execute_run(run, batch, common, cases, arms, prices, key, timeout):
@@ -829,14 +997,13 @@ def execute_run(run, batch, common, cases, arms, prices, key, timeout):
         review = run_reviewer(ctx, prompt, draft["final"])
         stages.append({k: v for k, v in review.items() if k != "usage"})
         if (review.get("final") or "").strip():
-            revise_prompt = ("A reviewer commented on your answer and plan as below. Revise accordingly and return the complete "
-                             "revised answer and plan; explain any comment you disagree with.\n\n=== Review ===\n" + review["final"])
+            revise_prompt = T["candidate.revise"].format(review=review["final"])
             revised, sid2 = run_candidate_stage(ctx, "revise", revise_prompt, resume=sid)
             stages.append(revised)
             sessions.append(sid2)
     usage, models, efforts, steps, found = collect_usage(ctx, sessions)
     (out / "trajectory.json").write_text(json.dumps(steps, ensure_ascii=False, indent=1), encoding="utf-8")
-    # Each snapshot is a full checkout (~340 MB); 109 of them filled the disk on 2026-09-23.
+    # Each snapshot is a full checkout; kept, a batch of them fills the disk.
     # Rollouts and homes stay for `recompute`; the snapshot is reproducible from the SHA.
     shutil.rmtree(root / "wt", ignore_errors=True)
     # A fresh CODEX_HOME unpacks ~90 MB of bundled files into .tmp; sessions stay for `recompute`.
@@ -879,14 +1046,21 @@ def load_records(batch, name="runs.jsonl"):
 
 
 class RecordWriter:
-    """The single writer of a batch ledger: one appended JSON line per terminal state."""
+    """The single writer of a batch ledger: one appended JSON line per terminal state.
 
-    def __init__(self, path):
+    Each row is stamped with the text and the kit it ran on. `recompute` rewrites rows run
+    earlier and passes stamp=False, so an old row never claims today's text.
+    """
+
+    def __init__(self, path, stamp=True):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
+        self.stamp = stamp
 
     def append(self, row):
+        if self.stamp:
+            row = {**row, "text_digest": TEXT_DIGEST, "kit_digest": KIT_DIGEST}
         line = json.dumps(row, ensure_ascii=False) + "\n"
         with self.lock, open(self.path, "a", encoding="utf-8") as fh:
             fh.write(line)
@@ -894,7 +1068,24 @@ class RecordWriter:
             os.fsync(fh.fileno())
 
 
+LEDGERS = ("runs.jsonl", "plans.jsonl", "judgments.jsonl", "calibration.jsonl")
+
+
+def check_batch_text(batch):
+    """One batch compares candidates on one text: refuse to add to a batch written with another.
+
+    Rows written before digests existed carry none, so such a batch stays read-only: `report`
+    works, `run`, `adopt`, `judge` and `calibrate` refuse it.
+    """
+    found = {row.get("text_digest") for name in LEDGERS for row in read_jsonl(batch_dir(batch) / name)}
+    if found - {TEXT_DIGEST}:
+        seen = ", ".join(sorted(d or "none" for d in found))
+        raise EvalError(f"batch {batch} was written with prompt text {seen}; the configured text is {TEXT_DIGEST}. "
+                        "Start a new batch: one batch compares candidates on one text.")
+
+
 def cmd_run(args):
+    check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
     impl_cases = {k: v for k, v in cases.items() if is_impl(v)}
     if impl_cases:
@@ -936,10 +1127,16 @@ def cmd_recompute(args):
 
     Needed for records written before per-file aggregation: they counted only the last
     rollout file, so a run whose candidate or reviewer spawned subagents was under-costed.
+    Planning runs only: an implementation run's cost includes its shared plan and its validity
+    its hidden tests, which this does not re-derive, so such a batch is refused untouched.
     """
+    implement = sorted(r["run_id"] for r in load_records(args.batch).values() if r.get("kind") == "implement")
+    if implement:
+        raise EvalError(f"recompute re-derives planning runs only; batch {args.batch} holds implementation runs "
+                        f"({', '.join(implement[:3])}{', …' if len(implement) > 3 else ''})")
     arms, prices = load_arms(), load_prices()
     cands = {c["id"]: c for c in arms["candidates"]}
-    writer = RecordWriter(batch_dir(args.batch) / "runs.jsonl")
+    writer = RecordWriter(batch_dir(args.batch) / "runs.jsonl", stamp=False)
     changed = 0
     for rec in list(load_records(args.batch).values()):
         if not rec.get("stages"):
@@ -984,7 +1181,11 @@ def cmd_recompute(args):
 
 
 def adopt_runs(source_records, candidates, efforts, repeats):
-    """One forced-adoption run per earlier review run and repeat, reusing its draft and review."""
+    """One forced-adoption run per earlier review run and repeat, reusing its draft and review.
+
+    A repeated source (`…-review-r2`) keeps its repeat in the new id (`…-adopt-s2-r1`), so two
+    sources never claim one run directory; an unrepeated source keeps the old `…-adopt-r1`.
+    """
     runs = []
     for rec in sorted(source_records, key=lambda r: r["run_id"]):
         if rec.get("mode") != "review" or rec.get("status") != "valid":
@@ -994,14 +1195,17 @@ def adopt_runs(source_records, candidates, efforts, repeats):
         review = next((s.get("final") or "" for s in rec["stages"] if s["stage"] == "review"), "")
         if not review.strip() or not (rec.get("draft") or "").strip():
             continue
+        source_rep = re.search(r"-review-r(\d+)$", rec["run_id"])
+        stem = f"{rec['case']}-{rec['candidate']}-{rec['effort']}-adopt" + (f"-s{source_rep.group(1)}" if source_rep else "")
         for rep in range(1, repeats + 1):
-            runs.append({"run_id": f"{rec['case']}-{rec['candidate']}-{rec['effort']}-adopt-r{rep}",
+            runs.append({"run_id": f"{stem}-r{rep}",
                          "candidate_id": rec["candidate"], "case": rec["case"], "effort": rec["effort"], "mode": "adopt",
                          "source_run": rec["run_id"], "prompt_extra": adopt_prompt_extra(rec["draft"], review)})
     return runs
 
 
 def cmd_adopt(args):
+    check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
     arms, prices = load_arms(), load_prices()
     cands = {c["id"]: c for c in arms["candidates"]}
@@ -1235,7 +1439,7 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
         plan = plans.get(plan_run_id(case["id"], planner_of(mode), run["rep"]))
         if not plan or plan.get("status") != "valid":
             return {**base, "status": "invalid", "reasons": ["plan unavailable"], "stages": [], "finished_at": now()}
-        prompt += "\n\n" + common["split_plan_intro"] + "\n\n=== Plan ===\n" + plan["final"]
+        prompt += "\n\n" + common["split_plan_intro"] + "\n\n" + T["candidate.plan_heading"] + "\n" + plan["final"]
         base["plan_marker_hits"] = [m for m in markers if m and m in plan["final"]]
     (out / "prompt.txt").write_text(prompt, encoding="utf-8")
     wt = prepare_snapshot(case, root)
@@ -1371,10 +1575,10 @@ def impl_answer(rec, out, limit=120_000):
             continue
         kept.append(part)
         size += len(part)
-    note = f"\n(diff omitted for length: {', '.join(omitted)})" if omitted else ""
-    return (f"{rec.get('final', '')}\n\n=== Candidate's changes (git diff against the snapshot, "
-            f"{rec['diff']['files']} files, +{rec['diff']['added']}/-{rec['diff']['deleted']}) ===\n"
-            + ("".join(kept) or "(no changes)") + note)
+    note = T["judge.diff_omitted"].format(files=", ".join(omitted)) if omitted else ""
+    heading = T["judge.diff_heading"].format(files=rec["diff"]["files"], added=rec["diff"]["added"],
+                                             deleted=rec["diff"]["deleted"])
+    return f"{rec.get('final', '')}\n\n{heading}\n" + ("".join(kept) or T["judge.no_changes"]) + note
 
 
 # --------------------------------------------------------------------- judge
@@ -1399,22 +1603,12 @@ def judge_prompt(case, common, prompt, steps, answer):
     rubric = case["rubric"] + common["rubric"]
     traj = "\n".join(
         f"[{i}] {s['kind']}: {s.get('name', '')} {s.get('input', '')}{s.get('text', '')}".strip()
-        for i, s in enumerate(steps, 1)) or "(no tool calls recorded)"
-    items = "\n".join(f"- {r['id']}: {r['text']} (evidence: {r['evidence']})" for r in rubric)
-    return (
-        "You are an eval judge. Below are an eval case, an anonymous candidate agent's tool-call trajectory and its final answer. "
-        "Judge only against the given pass conditions and rubric, item by item; do not grade style. Every verdict cites a "
-        "trajectory step number or the answer's own words as evidence; no evidence means fail. Equivalent approaches are "
-        "accepted as listed under 'Accepted equivalents'.\n\n"
-        f"=== Case as the candidate saw it ===\n{prompt}\n\n"
-        f"=== Trap (judged at two levels) ===\nThe original agent's mistake: {case['trap']['description']}\n"
-        f"direction (right way; only the direction of the recommended approach, details need not be complete): {case['trap']['direction']}\n"
-        f"pass (done right): {case['trap']['pass']}\n"
-        "If pass is true, direction is true.\n\n"
-        f"=== Rubric (judge each) ===\n{items}\n\n=== Accepted equivalents ===\n{case['equivalents']}\n\n"
-        f"=== Candidate trajectory ===\n{traj}\n\n=== Candidate final answer ===\n{answer}\n\n"
-        f"Output JSON: one trap entry (direction, pass, evidence) and one items entry per rubric id ({', '.join(r['id'] for r in rubric)})."
-    )
+        for i, s in enumerate(steps, 1)) or T["judge.no_steps"]
+    items = "\n".join(T["judge.rubric_item"].format(id=r["id"], text=r["text"], evidence=r["evidence"]) for r in rubric)
+    return T["judge.prompt"].format(
+        prompt=prompt, description=case["trap"]["description"], direction=case["trap"]["direction"],
+        trap_pass=case["trap"]["pass"], items=items, equivalents=case["equivalents"], trajectory=traj, answer=answer,
+        ids=", ".join(r["id"] for r in rubric))
 
 
 def call_judge(judge, prompt, workdir, key, timeout):
@@ -1463,6 +1657,7 @@ def judge_targets(record):
 
 
 def cmd_judge(args):
+    check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
     arms, prices = load_arms(), load_prices()
     key = gateway_key()
@@ -1519,6 +1714,7 @@ def cmd_calibrate(args):
     passing it shows the Trap is passable as written. A judge that fails the positive
     is too strict, or the pass condition asks for more than the owner did.
     """
+    check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
     arms, prices = load_arms(), load_prices()
     key = gateway_key()
@@ -1636,14 +1832,11 @@ def render_markdown(batch, rows, cases, arms):
     run_cost = (sum(r.get("chain_cost_usd") or 0 for r in valid if not r.get("plan_run"))
                 + sum(r.get("cost_usd") or 0 for r in valid if r.get("plan_run")) + sum(plans.values()))
     judge_cost = sum(j.get("cost_usd") or 0 for j in judgments.values())
-    out = [f"## Data: batch `{batch}`", "",
-           f"{len(valid)} valid runs, {len(invalid)} invalid; run cost ${run_cost:.2f} (reviewer included; a shared plan counted once), "
-           f"judging cost ${judge_cost:.2f}. Trap is shown as direction/pass: ✓ both judges pass, ✗ both fail, ? they disagree or "
-           "did not judge; rubric is the number of items both judges pass / total.", ""]
+    out = [T["report.md_title"].format(batch=batch), "",
+           T["report.md_intro"].format(valid=len(valid), invalid=len(invalid), run_cost=run_cost, judge_cost=judge_cost), ""]
     overlaid = sorted({f for r in valid for f in (r.get("overlay") or {})})
     if overlaid:
-        out += ["Snapshot code unchanged; these instruction files were replaced by the overlay_dir versions: "
-                + ", ".join(f"`{f}`" for f in overlaid) + ".", ""]
+        out += [T["report.md_overlay"].format(files=T["report.list_sep"].join(f"`{f}`" for f in overlaid)), ""]
     disputes = []
     for case_id, case in cases.items():
         case_rows = [r for r in valid if r["case"] == case_id]
@@ -1652,8 +1845,8 @@ def render_markdown(batch, rows, cases, arms):
         out += [f"### {case_id} · {case['title']}", ""]
         if is_impl(case):
             ht = case["hidden_tests"]
-            out += [f"{ht['expected']} hidden tests; the bare snapshot passes {ht.get('baseline', '?')}.", "",
-                    "| Model | effort | Delivery | Hidden tests (per run) | Trap direction/pass | Rubric | Mean cost | Mean time |",
+            out += [T["report.md_hidden"].format(expected=ht["expected"], baseline=ht.get("baseline", "?")), "",
+                    "| " + " | ".join(T["report.impl_columns"]) + " |",
                     "|---|---|---|---|---|---|---|---|"]
             groups = {}
             for r in case_rows:
@@ -1668,7 +1861,7 @@ def render_markdown(batch, rows, cases, arms):
                     _, agreed, disputed = agreement(per) if per else (None, None, [])
                     items.append(f"{agreed[0]}/{agreed[1]}" if agreed else "—")
                     if per and (d is None or t is None):
-                        disputes.append(f"{r['run_id']}: trap")
+                        disputes.append(T["report.md_dispute_trap"].format(run=r["run_id"]))
                 costs = [r["chain_cost_usd"] for r in reps if r.get("chain_cost_usd") is not None]
                 secs = [r["elapsed_s"] for r in reps if r.get("elapsed_s")]
                 out.append(f"| {key[0]} | {key[1]} | {key[2]} | {' · '.join(str(r['tests']['passed']) for r in reps)} | "
@@ -1676,7 +1869,7 @@ def render_markdown(batch, rows, cases, arms):
                            f"{'$%.2f' % (sum(costs) / len(costs)) if costs else '?'} | "
                            f"{int(sum(secs) / len(secs)) if secs else '?'}s |")
         else:
-            out += ["| Model | effort | Delivery | Trap (draft) | Rubric (draft) | Trap (final) | Rubric (final) | Chain cost | Time |",
+            out += ["| " + " | ".join(T["report.plan_columns"]) + " |",
                     "|---|---|---|---|---|---|---|---|---|"]
             for r in sorted(case_rows, key=lambda r: (r["model"], effort_order.index(r["effort"]), r["mode"])):
                 cells = []
@@ -1686,16 +1879,17 @@ def render_markdown(batch, rows, cases, arms):
                     _, agreed, _ = agreement(per) if per else (None, None, [])
                     cells += [f"{mark[d]}/{mark[t]}", f"{agreed[0]}/{agreed[1]}" if agreed else "—"]
                     if per and t is None:
-                        disputes.append(f"{r['run_id']} {target}: trap")
+                        disputes.append(T["report.md_dispute_target_trap"].format(run=r["run_id"], target=target))
                 if r["mode"] != "review":
-                    cells[2:4] = ["= draft", "= draft"]
+                    cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
                 cost = r.get("chain_cost_usd")
                 out.append(f"| {r['model']} | {r['effort']} | {r['mode']} | {' | '.join(cells)} | "
                            f"{'$%.2f' % cost if cost is not None else '?'} | {r.get('elapsed_s') or '?'}s |")
         out.append("")
-    out += ["### Judge disagreements", ""] + ([f"- {d}" for d in disputes] or ["- none"]) + [""]
-    out += ["### Invalid runs", ""] + ([f"- `{r['run_id']}`: {'; '.join(r.get('reasons') or [])}" for r in invalid]
-                                    or ["- none"]) + [""]
+    none = f"- {T['report.none']}"
+    out += [T["report.md_disputes"], ""] + ([f"- {d}" for d in disputes] or [none]) + [""]
+    out += [T["report.md_invalid"], ""] + ([T["report.md_invalid_item"].format(run=r["run_id"], reasons="; ".join(r.get("reasons") or []))
+                                          for r in invalid] or [none]) + [""]
     return "\n".join(out)
 
 
@@ -1708,11 +1902,10 @@ def render_impl_case(case_id, case, rows):
         groups.setdefault((r["candidate"], r["model"], r["effort"], r["mode"]), []).append(r)
     disputes = []
     out = [f"<h2>{esc(case_id)} · {esc(case['title'])}</h2>"
-           f"<p class='lede'>{case['hidden_tests']['expected']} hidden tests; the bare snapshot passes "
-           f"{case['hidden_tests'].get('baseline', '?')} (the floor). Trap direction/pass and rubric count only when both judges pass. "
-           "Cost includes the full shared plan (split modes).</p><div class='scroll'><table><thead><tr>"
-           "<th>Model</th><th>effort</th><th>Delivery</th><th>Hidden tests (per run)</th><th>Mean pass rate</th>"
-           "<th>Trap direction/pass</th><th>Rubric</th><th>Diff +/-</th><th>Mean cost</th><th>Mean time</th></tr></thead><tbody>"]
+           "<p class='lede'>" + T["report.impl_lede"].format(expected=case["hidden_tests"]["expected"],
+                                                              baseline=case["hidden_tests"].get("baseline", "?"))
+           + "</p><div class='scroll'><table><thead><tr>"
+           + "".join(f"<th>{c}</th>" for c in T["report.impl_html_columns"]) + "</tr></thead><tbody>"]
     for key in sorted(groups, key=lambda k: (k[0], effort_order.index(k[2]), k[3])):
         reps = sorted(groups[key], key=lambda r: r.get("rep") or 0)
         rates = [r["tests"]["pass_rate"] or 0.0 for r in reps]
@@ -1729,7 +1922,7 @@ def render_impl_case(case_id, case, rows):
             if disputed:
                 disputes.append(f"{r['run_id']}: {', '.join(disputed)}")
             if per and (trap is None or direction is None):
-                disputes.append(f"{r['run_id']}: trap")
+                disputes.append(T["report.html_dispute_trap"].format(run=r["run_id"]))
         costs = [r["chain_cost_usd"] for r in reps if r.get("chain_cost_usd") is not None]
         secs = [r["elapsed_s"] for r in reps if r.get("elapsed_s")]
         diff_txt = " · ".join(f"+{r['diff']['added']}/-{r['diff']['deleted']}" for r in reps)
@@ -1756,8 +1949,7 @@ def render_report(batch, rows, cases, arms):
             disputes += case_disputes
             continue
         body.append(f"<h2>{esc(case_id)} · {esc(case['title'])}</h2><div class='scroll'><table><thead><tr>"
-                    "<th>Model</th><th>effort</th><th>Delivery</th><th>Trap (draft)</th><th>Rubric (draft)</th>"
-                    "<th>Trap (final)</th><th>Rubric (final)</th><th>Chain cost</th><th>Time</th></tr></thead><tbody>")
+                    + "".join(f"<th>{c}</th>" for c in T["report.plan_columns"]) + "</tr></thead><tbody>")
         case_rows = sorted([r for r in valid if r["case"] == case_id],
                            key=lambda r: (r["candidate"], effort_order.index(r["effort"]), r["mode"]))
         for r in case_rows:
@@ -1767,32 +1959,34 @@ def render_report(batch, rows, cases, arms):
                 if target == "draft" and r["mode"] == "solo":
                     per = r["scores"].get("final", {})
                 trap, items, disputed = agreement(per) if per else (None, None, [])
-                trap_txt = {True: "<span class='ok'>pass</span>", False: "<span class='bad'>fail</span>",
-                            None: "<span class='warn'>split/unjudged</span>"}[trap]
+                trap_txt = {True: f"<span class='ok'>{T['report.pass']}</span>",
+                            False: f"<span class='bad'>{T['report.fail']}</span>",
+                            None: f"<span class='warn'>{T['report.split_unjudged']}</span>"}[trap]
                 item_txt = f"{items[0]}/{items[1]}" if items else "—"
                 if disputed:
-                    item_txt += f" <span class='warn'>split {','.join(disputed)}</span>"
+                    item_txt += f" <span class='warn'>{T['report.split_items'].format(ids=','.join(disputed))}</span>"
                     disputes.append(f"{r['run_id']} {target}: {', '.join(disputed)}")
                 if trap is None and per:
-                    disputes.append(f"{r['run_id']} {target}: trap")
+                    disputes.append(T["report.html_dispute_target_trap"].format(run=r["run_id"], target=target))
                 cells += [trap_txt, item_txt]
             if r["mode"] == "solo":
-                cells[2:4] = ["= draft", "= draft"]
+                cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
             cost = r.get("chain_cost_usd")
             body.append(f"<tr><td>{esc(r['model'])}</td><td>{esc(r['effort'])}</td><td>{esc(r['mode'])}</td>"
                         + "".join(f"<td>{c}</td>" for c in cells)
                         + f"<td class='num'>{'$%.2f' % cost if cost is not None else '?'}</td>"
                         f"<td class='num'>{r.get('elapsed_s') or '?'}s</td></tr>")
         body.append("</tbody></table></div>")
-    inv = "".join(f"<li><code>{esc(r['run_id'])}</code>：{esc('; '.join(r.get('reasons') or []))}</li>"
-                  for r in invalid) or "<li>none</li>"
-    dis = "".join(f"<li>{esc(d)}</li>" for d in disputes) or "<li>none</li>"
-    return f"""<title>Agent eval report {esc(batch)}</title>
+    none = f"<li>{T['report.none']}</li>"
+    inv = "".join(f"<li><code>{esc(r['run_id'])}</code>{T['report.html_invalid_sep']}{esc('; '.join(r.get('reasons') or []))}</li>"
+                  for r in invalid) or none
+    dis = "".join(f"<li>{esc(d)}</li>" for d in disputes) or none
+    return f"""<title>{T['report.title'].format(batch=esc(batch))}</title>
 <style>
 :root{{--bg:#f6f7f9;--fg:#1b2130;--muted:#5d6577;--line:#dfe2e8;--ok:#1f7a4d;--bad:#a3303a;--warn:#9a5b00;--card:#fff}}
 @media (prefers-color-scheme: dark){{:root:not([data-theme="light"]){{color-scheme:dark;--bg:#12151c;--fg:#e6e8ee;--muted:#9aa2b3;--line:#2c3342;--ok:#6cc99a;--bad:#ec8b93;--warn:#e0b060;--card:#1a1f29}}}}
 :root[data-theme="dark"]{{color-scheme:dark;--bg:#12151c;--fg:#e6e8ee;--muted:#9aa2b3;--line:#2c3342;--ok:#6cc99a;--bad:#ec8b93;--warn:#e0b060;--card:#1a1f29}}
-body{{background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;line-height:1.6}}
+body{{background:var(--bg);color:var(--fg);font-family:{T['report.font']};line-height:1.6}}
 .wrap{{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:24px}}
 .scroll{{overflow-x:auto}} table{{border-collapse:collapse;width:100%;background:var(--card);font-size:14px}}
 th,td{{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}}
@@ -1800,13 +1994,11 @@ th,td{{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white
 .lede{{color:var(--muted);max-width:75ch}}
 </style>
 <div class="wrap">
-<h1>Agent eval report · {esc(batch)}</h1>
-<p class="lede">Reference results; nothing here changes your agent configuration. Trap and rubric count only when both judges pass;
-disagreements are listed for the owner to rule on. Cost is at list prices over the whole chain including reviewer and revision;
-judging is not included. {len(valid)} valid runs, {len(invalid)} invalid.</p>
+<h1>{T['report.heading'].format(batch=esc(batch))}</h1>
+<p class="lede">{T['report.lede'].format(valid=len(valid), invalid=len(invalid))}</p>
 {''.join(body)}
-<h2>Disagreements for the owner to rule on</h2><ul>{dis}</ul>
-<h2>Invalid runs</h2><ul>{inv}</ul>
+<h2>{T['report.disputes']}</h2><ul>{dis}</ul>
+<h2>{T['report.invalid']}</h2><ul>{inv}</ul>
 </div>"""
 
 
@@ -1881,9 +2073,14 @@ def main(argv=None):
     rep.add_argument("--md", help="also write the tables as Markdown, for archiving under docs/")
     rep.set_defaults(func=cmd_report)
 
+    txt = sub.add_parser("text", help="print the text table (the configured file, else the defaults) as JSON, "
+                                      "the starting point for a translation")
+    txt.set_defaults(func=lambda args: print(json.dumps(T, ensure_ascii=False, indent=1)) or 0)
+
     args = ap.parse_args(argv)
     try:
-        configure(args.config)
+        if args.cmd != "text" or Path(args.config).exists():
+            configure(args.config)
         return args.func(args)
     except EvalError as exc:
         print(f"error: {exc}", file=sys.stderr)

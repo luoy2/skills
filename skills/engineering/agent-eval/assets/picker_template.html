@@ -5,7 +5,7 @@
   --bg:#f5f6f8; --surface:#ffffff; --ink:#1b2130; --muted:#5d6577; --line:#dfe2e8;
   --accent:#3547b8; --accent-soft:#e8ebfa; --good:#1f7a4d; --good-soft:#e3f3ea;
   --warn:#9a5b00; --warn-soft:#fbf0dc; --bad:#a3303a; --bad-soft:#f8e4e6; --btn-ink:#ffffff;
-  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --sans:%%page.font%%;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){
@@ -84,12 +84,12 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 </style>
 <div class="wrap">
   <header style="display:flex;flex-direction:column;gap:8px"><h1>__TITLE__</h1>
-  <p class="lede">Each candidate is a moment in a real session where an agent went wrong and the owner corrected it. Tick the ones to turn into eval cases, ideally of different error types, then press "Copy selection" at the bottom and paste it back into the chat.</p></header>
+  <p class="lede">%%picker.lede%%</p></header>
   <section id="list" style="display:flex;flex-direction:column;gap:12px"></section>
 </div>
 <div class="bar"><div class="bar-in">
-  <span class="count" id="count"></span><button id="copy" type="button">Copy selection</button>
-  <textarea id="out" rows="2" readonly hidden aria-label="Selection"></textarea>
+  <span class="count" id="count"></span><button id="copy" type="button">%%picker.copy%%</button>
+  <textarea id="out" rows="2" readonly hidden aria-label="%%picker.selection%%"></textarea>
 </div></div>
 <script>
 const DATA=/*__DATA__*/null;
@@ -98,20 +98,20 @@ const list=document.getElementById('list');
 list.innerHTML=DATA.candidates.map(c=>`<label class="cand" for="c-${esc(c.id)}">
   <input type="checkbox" id="c-${esc(c.id)}" value="${esc(c.id)}" ${c.rec?'checked':''}>
   <div><b style="font-family:var(--mono);color:var(--accent)">${esc(c.id)}</b> <b>${esc(c.title)}</b>
-    <div class="chips">${c.rec?'<span class="chip rec">recommended</span>':''}${(c.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div>
-  <dl><dt>Original task</dt><dd>${esc(c.task)}</dd><dt>What went wrong</dt><dd>${esc(c.wrong)}</dd>
-      <dt>Owner correction</dt><dd>“${esc(c.fix)}”</dd><dt>Right direction</dt><dd>${esc(c.right)}</dd></dl>
+    <div class="chips">${c.rec?'<span class="chip rec">%%picker.recommended%%</span>':''}${(c.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div>
+  <dl><dt>%%picker.task%%</dt><dd>${esc(c.task)}</dd><dt>%%picker.wrong%%</dt><dd>${esc(c.wrong)}</dd>
+      <dt>%%picker.fix%%</dt><dd>%%picker.quote_open%%${esc(c.fix)}%%picker.quote_close%%</dd><dt>%%picker.right%%</dt><dd>${esc(c.right)}</dd></dl>
   ${c.note?`<div class="note" style="grid-column:2;color:var(--warn)">${esc(c.note)}</div>`:''}
-  <div class="src">${esc(c.source||'')}${c.snapshot?` · snapshot <span class="mono">${esc(c.snapshot)}</span>`:''}</div>
+  <div class="src">${esc(c.source||'')}${c.snapshot?` · %%picker.snapshot%% <span class="mono">${esc(c.snapshot)}</span>`:''}</div>
 </label>`).join('');
 const count=document.getElementById('count');
 const picked=()=>DATA.candidates.filter(c=>document.getElementById('c-'+c.id).checked);
-function update(){const p=picked();count.textContent=`${p.length} selected`+(DATA.pick?` / ${DATA.pick}`:'')+(p.length?' · '+[...new Set(p.flatMap(c=>c.tags||[]))].join('; '):'')}
+function update(){const p=picked();count.textContent='%%picker.selected%%'.replace('{n}',p.length)+(DATA.pick?` / ${DATA.pick}`:'')+(p.length?' · '+[...new Set(p.flatMap(c=>c.tags||[]))].join('%%picker.tag_sep%%'):'')}
 list.addEventListener('change',update);update();
 document.getElementById('copy').addEventListener('click',()=>{
-  const text='Picked: '+picked().map(c=>`${c.id} (${c.title})`).join(', ');
+  const text='%%picker.picked%%'+picked().map(c=>`${c.id}%%picker.title_open%%${c.title}%%picker.title_close%%`).join('%%picker.list_sep%%');
   const out=document.getElementById('out');out.value=text;out.hidden=false;
   const btn=document.getElementById('copy');
-  navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied — paste it back into the chat'},()=>{out.select();btn.textContent='Copy the box below by hand'});
+  navigator.clipboard.writeText(text).then(()=>{btn.textContent='%%page.copied%%'},()=>{out.select();btn.textContent='%%page.copy_by_hand%%'});
 });
 </script>
