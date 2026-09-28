@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en" data-title-en="questionnaire-review: the pick you keep overriding, made a rule" data-title-zh="questionnaire-review：你总推翻的推荐，写成规则">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>questionnaire-review: the pick you keep overriding, made a rule</title>
+<meta name="description" content="Your agents ask multiple-choice questions with a recommended option. questionnaire-review finds the overrides that repeat and turns them into rules you approve one by one. Runs on your computer.">
+<link rel="canonical" href="https://luoy2.github.io/skills/questionnaire-review/">
+<meta name="theme-color" content="#0A0A0F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F2EE" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Agent Retro">
+<meta property="og:title" content="questionnaire-review: the pick you keep overriding, made a rule">
+<meta property="og:description" content="Review the questions your agents asked. The overrides that repeat become rules you approve one by one.">
+<meta property="og:url" content="https://luoy2.github.io/skills/questionnaire-review/">
+<meta property="og:image" content="https://luoy2.github.io/skills/assets/og-questionnaire-review.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="questionnaire-review. The pick you keep overriding? Make it a rule.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="questionnaire-review: the pick you keep overriding, made a rule">
+<meta name="twitter:description" content="Review the questions your agents asked. The overrides that repeat become rules you approve one by one.">
+<meta name="twitter:image" content="https://luoy2.github.io/skills/assets/og-questionnaire-review.png">
+<meta name="twitter:image:alt" content="questionnaire-review. The pick you keep overriding? Make it a rule.">
+
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  // Set the language before first paint so a Chinese reader never sees the English flash.
+  (function () {
+    var lang = 'en';
+    try {
+      var q = new URLSearchParams(location.search).get('lang');
+      if (q === 'zh' || q === 'en') { lang = q; }
+      else { var s = localStorage.getItem('agent-retro-lang'); if (s === 'zh' || s === 'en') lang = s; }
+    } catch (e) {}
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  })();
+</script>
+</head>
+<body class="page-qr">
+<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol></svg>
+<a class="skip" href="#main"><span class="en">Skip to content</span><span class="zh" lang="zh-CN">跳到正文</span></a>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="../" aria-label="Agent Retro: all three skills">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--mark-bg)"/><path d="M7.5 16a8.5 8.5 0 1 0 2.6-6.1L7.5 12.4" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 7.2v5.2h5.2" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="2.6" fill="var(--amber-fill)"/></svg>
+      <span class="brand-name">Agent Retro</span>
+    </a>
+    <nav class="site-nav" aria-label="Sections">
+      <a href="#how"><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></a>
+      <a href="#results"><span class="en">Results</span><span class="zh" lang="zh-CN">实测</span></a>
+      <a href="#install"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></a>
+      <a href="#privacy"><span class="en">Privacy</span><span class="zh" lang="zh-CN">隐私</span></a>
+    </nav>
+    <div class="header-actions">
+      <div class="lang-toggle" role="group" data-i18n-aria="lang-group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true" lang="en">EN</button>
+        <button type="button" data-lang="zh" aria-pressed="false" lang="zh-CN">中文</button>
+      </div>
+      <a class="icon-link" href="https://github.com/luoy2/skills" data-i18n-aria="github" aria-label="luoy2/skills on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero skill-hero" aria-labelledby="hero-title">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="../"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">All three skills</span><span class="zh" lang="zh-CN">全部三个 skill</span></a>
+      <span class="sep" aria-hidden="true">/</span>
+      <span class="skill-tag" aria-current="page" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)"><span class="dot" aria-hidden="true"></span>questionnaire-review</span>
+    </nav>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <h1 id="hero-title">
+          <span class="en">The pick you keep overriding? <em>Make it a rule.</em></span>
+          <span class="zh" lang="zh-CN">你总推翻的推荐，<wbr><em>写成规则</em></span>
+        </h1>
+        <p class="lead en"><strong>Your overrides aren’t random.</strong> Claude Code agents ask you to decide through multiple-choice questions, with one option marked recommended. Each time you pick something else, the agent’s default judgment and yours differed. questionnaire-review finds the differences that repeat and turns them into rules you approve one by one.</p>
+        <p class="lead zh" lang="zh-CN"><strong>你的改选不是随机的。</strong>Claude Code 的 agent 用选择题请你拍板，其中一个选项标着推荐。你每选一次别的，就说明它的默认判断和你的不一样。questionnaire-review 找出反复出现的分歧，写成候选规则，你逐条拍板。</p>
+        <p class="hero-meta en">Part of the <code>luoy2-skills</code> plugin · Claude Code and Codex · MIT · runs on your computer and sends nothing to the author</p>
+        <p class="hero-meta zh" lang="zh-CN"><code>luoy2-skills</code> 插件的一部分 · Claude Code 和 Codex · MIT 许可 · 在你的电脑上运行，不向作者发送任何数据</p>
+      </div>
+      <figure class="hero-video">
+        <div class="video-frame">
+          <video controls playsinline preload="metadata" poster="../assets/questionnaire-review-poster.jpg" aria-label="questionnaire-review video" data-aria-en="questionnaire-review video" data-aria-zh="questionnaire-review 介绍视频">
+            <source src="../assets/questionnaire-review.mp4" type="video/mp4">
+            <p><a href="../assets/questionnaire-review.mp4"><span class="en">Download the video</span><span class="zh" lang="zh-CN">下载视频</span></a></p>
+          </video>
+        </div>
+        <figcaption>
+          <span class="en">Chinese voice-over. Chinese and English subtitles are in the picture.</span>
+          <span class="zh" lang="zh-CN">中文配音，中英字幕在画面里。</span>
+        </figcaption>
+      </figure>
+    </div>
+    <div class="install-card" id="install" aria-labelledby="install-title">
+      <div class="ic-head">
+        <div>
+          <h2 id="install-title"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></h2>
+          <p class="en">Paste it into Claude Code or Codex. It names the plugin and gives the command for each agent. One plugin, all three skills.</p>
+    <p class="zh" lang="zh-CN">粘到 Claude Code 或 Codex 里。里面写了装哪个插件，以及每种 agent 该跑的命令。一个插件，三个 skill 一起装上。</p>
+        </div>
+        <button type="button" class="copy-main" data-copy-install>
+          <svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="copy-label"><span class="en">Copy install link</span><span class="zh" lang="zh-CN">复制安装链接</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span>
+        </button>
+      </div>
+      <pre class="install-text en"><code><span class="it-say">Install the luoy2-skills plugin (agent-eval, questionnaire-review, i-have-ocd) from https://github.com/luoy2/skills.</span>
+<span class="it-k">Claude Code:</span> claude plugin marketplace add luoy2/skills &amp;&amp; claude plugin install luoy2-skills@luoy2 (then type /reload-plugins)
+<span class="it-k">Codex:</span> codex plugin marketplace add luoy2/skills &amp;&amp; codex plugin add luoy2-skills@luoy2
+<span class="it-k">Other agents:</span> DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;your agent&gt; -g -y</code></pre>
+      <pre class="install-text zh" lang="zh-CN"><code><span class="it-say">帮我安装 luoy2-skills 插件（agent-eval、questionnaire-review、i-have-ocd），来源 https://github.com/luoy2/skills。</span>
+<span class="it-k">Claude Code：</span>claude plugin marketplace add luoy2/skills &amp;&amp; claude plugin install luoy2-skills@luoy2（装完输入 /reload-plugins）
+<span class="it-k">Codex：</span>codex plugin marketplace add luoy2/skills &amp;&amp; codex plugin add luoy2-skills@luoy2
+<span class="it-k">其他 agent：</span>DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;你的 agent&gt; -g -y</code></pre>
+      <p class="ic-then en"><strong>Then say:</strong> <q>Run questionnaire-review on my last two weeks of questions</q></p>
+      <p class="ic-then zh" lang="zh-CN"><strong>装好后这样说：</strong><q>用 questionnaire-review 复盘我这两周的问卷</q></p>
+      <details class="ic-more">
+        <summary><span class="en">Or run it yourself</span><span class="zh" lang="zh-CN">或者自己动手装</span></summary>
+        <div class="ic-more-body">
+          <div class="cmd-block">
+            <div class="cmd-head">
+              <h3><span class="en">Claude Code · terminal</span><span class="zh" lang="zh-CN">Claude Code · 终端</span></h3>
+              <button type="button" class="copy" data-copy="claude plugin marketplace add luoy2/skills&#10;claude plugin install luoy2-skills@luoy2"><svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span></button>
+            </div>
+            <pre class="cmd cmd-sh"><code><span class="line">claude plugin marketplace add luoy2/skills</span>
+<span class="line">claude plugin install luoy2-skills@luoy2</span></code></pre>
+          </div>
+          <div class="cmd-block">
+            <div class="cmd-head">
+              <h3><span class="en">Claude Code · inside a session</span><span class="zh" lang="zh-CN">Claude Code · 会话里</span></h3>
+              <button type="button" class="copy" data-copy="/plugin marketplace add luoy2/skills&#10;/plugin install luoy2-skills@luoy2&#10;/reload-plugins"><svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span></button>
+            </div>
+            <pre class="cmd cmd-cc"><code><span class="line">/plugin marketplace add luoy2/skills</span>
+<span class="line">/plugin install luoy2-skills@luoy2</span>
+<span class="line">/reload-plugins</span></code></pre>
+          </div>
+          <div class="cmd-block">
+            <div class="cmd-head">
+              <h3>Codex</h3>
+              <button type="button" class="copy" data-copy="codex plugin marketplace add luoy2/skills&#10;codex plugin add luoy2-skills@luoy2"><svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span></button>
+            </div>
+            <pre class="cmd cmd-sh"><code><span class="line">codex plugin marketplace add luoy2/skills</span>
+<span class="line">codex plugin add luoy2-skills@luoy2</span></code></pre>
+          </div>
+          <div class="cmd-block wide">
+            <div class="cmd-head">
+              <h3><span class="en">Other agents · skills CLI</span><span class="zh" lang="zh-CN">其他 agent · skills 命令行</span></h3>
+              <button type="button" class="copy en" data-copy="DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;your agent&gt; -g -y"><svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span></button><button type="button" class="copy zh" data-copy="DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;你的 agent&gt; -g -y"><svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span><span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span></button>
+            </div>
+            <pre class="cmd cmd-sh cmd-wrap"><code><span class="line"><span class="en">DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;your agent&gt; -g -y</span><span class="zh" lang="zh-CN">DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;你的 agent&gt; -g -y</span></span></code></pre>
+          </div>
+        </div>
+        <p class="ic-more-note en">Pick one route. With both, Claude Code lists <code>agent-eval</code> and <code>luoy2-skills:agent-eval</code> side by side.</p>
+        <p class="ic-more-note zh" lang="zh-CN">两种方式选一种。都装的话，Claude Code 里会同时出现 <code>agent-eval</code> 和 <code>luoy2-skills:agent-eval</code>。</p>
+        <p class="ic-more-note en">Keep every flag on the <code>npx</code> line and put your agent’s name where it says <code>&lt;your agent&gt;</code>. Without the flags, skills 1.7.0 writes into your current repository, installs for all 79 agents it knows, and reports the install to Vercel.</p>
+        <p class="ic-more-note zh" lang="zh-CN"><code>npx</code> 那行的参数一个都别删，把 <code>&lt;你的 agent&gt;</code> 换成你用的 agent 名字。不加这些参数，skills 1.7.0 会往你当前的仓库里写文件、给它认识的 79 个 agent 全装一遍，还会向 Vercel 上报这次安装。</p>
+      </details>
+      <p class="sr-only" aria-live="polite" id="copy-status"></p>
+    </div>
+  </div>
+</section>
+
+<section class="section how" id="how" aria-labelledby="qr-title">
+  <div class="wrap how-grid">
+    <div class="how-copy">
+      <h2 id="qr-title">
+        <span class="en">Turn the options you overrode into rules your agents follow</span>
+        <span class="zh" lang="zh-CN">把你没按推荐选的地方，<wbr>变成 agent 要守的规则</span>
+      </h2>
+      <div class="mock mock-q" aria-label="Example questionnaire" data-i18n-aria="mock-q" role="group">
+        <p class="mock-label"><span class="en">Example</span><span class="zh" lang="zh-CN">示例</span></p>
+        <p class="mq-question"><span class="bullet" aria-hidden="true">●</span><span class="en">The nightly check fails about once a week. How should we handle it?</span><span class="zh" lang="zh-CN">夜间校验大约每周挂一次，怎么处理？</span></p>
+        <ol class="mq-options">
+          <li class="mq-rec"><span class="en">Open a ticket and fix it later</span><span class="zh" lang="zh-CN">开个票，以后再修</span> <span class="pill pill-rec"><span class="en">Recommended</span><span class="zh" lang="zh-CN">推荐</span></span></li>
+          <li class="mq-pick"><span class="en">Fix the cause in this change</span><span class="zh" lang="zh-CN">在这次改动里把原因修掉</span> <span class="pill pill-pick"><span class="en">You chose</span><span class="zh" lang="zh-CN">你选的</span></span></li>
+        </ol>
+        <p class="mq-rule">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m0 0-4-4m4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="en"><strong>Rule added:</strong> when you recommend deferring, say why. If you can’t, recommend the other option.</span>
+          <span class="zh" lang="zh-CN"><strong>新规则：</strong>推荐推迟时写出理由；写不出来，就推荐另一边。</span>
+        </p>
+      </div>
+      <div class="get">
+        <h3 class="h-sub"><span class="en">What you get</span><span class="zh" lang="zh-CN">你会得到</span></h3>
+        <p class="en">Your acceptance rate by kind of recommendation, themes with dated examples, and the rules you accepted. You start a round every two weeks; the first one also adds the checklist and the hook.</p>
+        <p class="zh" lang="zh-CN">按推荐类型拆开的采纳率、带日期例子的主题，以及你接受的规则。每两周由你发起一轮，第一轮还会加上清单和钩子。</p>
+      </div>
+    </div>
+    <div class="skill how-steps">
+      <h3 class="h-sub"><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></h3>
+      <ol class="steps">
+        <li>
+          <p class="en"><strong>Extract</strong> every questionnaire and your answer from <code>~/.claude/projects</code>: the options, which one was recommended, what you chose or wrote instead.</p>
+          <p class="zh" lang="zh-CN"><strong>提取。</strong>从 <code>~/.claude/projects</code> 取出每份问卷和你的回答：有哪些选项、推荐的是哪个、你选了什么或自己写了什么。</p>
+        </li>
+        <li>
+          <p class="en"><strong>Label.</strong> A small model labels what each recommendation does: act now, defer, keep the old path, hand you a manual step, file a ticket. The counting stays in the script.</p>
+          <p class="zh" lang="zh-CN"><strong>打标签。</strong>小模型标出每个推荐在做什么：现在就做、推迟、保持现状、让你动手、另开票。计数交给脚本。</p>
+        </li>
+        <li>
+          <p class="en"><strong>Read and audit.</strong> The agent reads every override, groups them into themes, and checks each theme against your project’s rules.</p>
+          <p class="zh" lang="zh-CN"><strong>通读、对照。</strong>agent 逐条读你的改选，归成主题，再对照项目规则，看每个主题写了没有。</p>
+        </li>
+        <li>
+          <p class="en"><strong>Decide.</strong> One question per candidate rule. Accepted rules go into your project’s rules in one PR; declined ones are skipped next round.</p>
+          <p class="zh" lang="zh-CN"><strong>拍板。</strong>每条候选规则问你一次。接受的在一个 PR 里写进项目规则，拒绝的下一轮不再提。</p>
+        </li>
+        <li>
+          <p class="en"><strong>Enforce.</strong> A PreToolUse hook hands the agent your checklist before each questionnaire, and it rewrites the question against it.</p>
+          <p class="zh" lang="zh-CN"><strong>落地。</strong>PreToolUse 钩子在每次出题前把清单交回给 agent，它先按清单改好题目再来问你。</p>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section results" id="results" aria-labelledby="results-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="results-title">
+        <span class="en">One round on the author’s own logs</span>
+        <span class="zh" lang="zh-CN">作者自己跑的一轮</span>
+      </h2>
+      <p class="en">The author’s Claude Code logs from one two-week round, 2026-09-13 to 09-27, on one machine: 1,071 questionnaires, 1,813 questions. 1,635 of them were single-choice with a recommendation and an answer; the charts cover those 1,635.</p>
+      <p class="zh" lang="zh-CN">作者自己的 Claude Code 日志，一轮两周（2026-09-13 至 09-27），一台机器：1,071 份问卷、1,813 道题。其中 1,635 道是带推荐、有作答的单选题，下面的图都按这 1,635 道算。</p>
+      <div class="scopes">
+        <p class="scope"><span class="en">The author’s own logs · one two-week round · one machine</span><span class="zh" lang="zh-CN">作者自己的日志 · 一轮两周 · 一台机器</span></p>
+      </div>
+    </div>
+
+    <article class="finding finding-lead" aria-labelledby="q1-title">
+      <h3 id="q1-title">
+        <span class="en">About a third of the answers went against the recommendation</span>
+        <span class="zh" lang="zh-CN">约三分之一的回答没照推荐选</span>
+      </h3>
+      <figure class="stackchart" data-animate>
+        <figcaption class="sr-only"><span class="en">How the 1,635 questions were answered: 65.9% took the recommendation, 20.6% picked another option, 13.5% wrote an answer instead.</span><span class="zh" lang="zh-CN">1,635 道题的作答：65.9% 照推荐选，20.6% 改选别的选项，13.5% 自己写。</span></figcaption>
+        <div class="stack" aria-hidden="true"><span class="s1" style="--w:65.9"></span><span class="s2" style="--w:20.6"></span><span class="s3" style="--w:13.5"></span></div>
+        <ul class="stack-legend">
+          <li class="k1"><strong>65.9%</strong><span class="en">took the recommendation</span><span class="zh" lang="zh-CN">照推荐选</span><small>1,078</small></li>
+          <li class="k2"><strong>20.6%</strong><span class="en">picked another option</span><span class="zh" lang="zh-CN">改选别的选项</span><small>336</small></li>
+          <li class="k3"><strong>13.5%</strong><span class="en">wrote an answer instead</span><span class="zh" lang="zh-CN">不选，自己写</span><small>221</small></li>
+        </ul>
+      </figure>
+      <p class="note en">Of the 336 times another option was picked, 282 (84%) picked the second one.</p>
+      <p class="note zh" lang="zh-CN">改选的 336 次里，282 次（84%）选的是第二项。</p>
+    </article>
+
+    <article class="finding" aria-labelledby="q2-title">
+      <h3 id="q2-title">
+        <span class="en">Recommended “later”: taken 36.7%. Recommended “now”: 75.6%.</span>
+        <span class="zh" lang="zh-CN">推荐「以后再做」只有 36.7% 被照选，<wbr>推荐「现在就做」是 75.6%</span>
+      </h3>
+      <figure class="hchart" data-animate>
+        <figcaption class="sr-only"><span class="en">How often the recommendation was taken, by what the recommendation did</span><span class="zh" lang="zh-CN">按推荐的类型，推荐被照选的比例</span></figcaption>
+        <div class="rank-legend" aria-hidden="true">
+          <span class="key key-hl"><span class="en">Share of that kind taken as recommended</span><span class="zh" lang="zh-CN">这一类里照推荐选的比例</span></span>
+          <span class="key key-ref"><span class="en">All 1,635 questions: 65.9%</span><span class="zh" lang="zh-CN">全部 1,635 道：65.9%</span></span>
+        </div>
+        <ul class="hbars hbars-rank" style="--max:100; --ref:65.9">
+          <li style="--v:81.6"><span class="hb-label"><span class="en">Combine into one</span><span class="zh" lang="zh-CN">合并成一次</span><small>38</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">81.6%</span></li>
+          <li style="--v:75.9"><span class="hb-label"><span class="en">Fix it in this change</span><span class="zh" lang="zh-CN">本次直接修</span><small>87</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">75.9%</span></li>
+          <li style="--v:75.9"><span class="hb-label"><span class="en">Waive or change the criterion</span><span class="zh" lang="zh-CN">豁免或改判据</span><small>54</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">75.9%</span></li>
+          <li class="hl" style="--v:75.6"><span class="hb-label"><span class="en">Act now</span><span class="zh" lang="zh-CN">现在就做</span><small>455</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">75.6%</span></li>
+          <li style="--v:75.5"><span class="hb-label"><span class="en">The agent does it with its tools</span><span class="zh" lang="zh-CN">agent 用工具做</span><small>204</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">75.5%</span></li>
+          <li style="--v:67.7"><span class="hb-label"><span class="en">Delete or retire</span><span class="zh" lang="zh-CN">删除或退役</span><small>62</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">67.7%</span></li>
+          <li style="--v:67.1"><span class="hb-label"><span class="en">Restructure</span><span class="zh" lang="zh-CN">改结构</span><small>164</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">67.1%</span></li>
+          <li style="--v:58.7"><span class="hb-label"><span class="en">File a ticket</span><span class="zh" lang="zh-CN">另开票</span><small>63</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">58.7%</span></li>
+          <li style="--v:57.6"><span class="hb-label"><span class="en">Hand you a manual step</span><span class="zh" lang="zh-CN">请你动手</span><small>99</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">57.6%</span></li>
+          <li style="--v:53.8"><span class="hb-label"><span class="en">Keep the old path</span><span class="zh" lang="zh-CN">保持现状</span><small>160</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">53.8%</span></li>
+          <li style="--v:50.0"><span class="hb-label"><span class="en">Verify or review first</span><span class="zh" lang="zh-CN">先验证或先评审</span><small>68</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">50.0%</span></li>
+          <li style="--v:50.0"><span class="hb-label"><span class="en">Split it up</span><span class="zh" lang="zh-CN">拆开做</span><small>54</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">50.0%</span></li>
+          <li class="hl" style="--v:36.7"><span class="hb-label"><span class="en">Defer to later</span><span class="zh" lang="zh-CN">推迟到以后</span><small>120</small></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">36.7%</span></li>
+        </ul>
+      </figure>
+      <p class="note en">Each row is one kind of recommendation, labelled by a small model (claude-haiku-4-5): 1,629 of the 1,635 questions got a label, for $5.81. The number after each label is how many questions were of that kind.</p>
+      <p class="note zh" lang="zh-CN">每一行是一类推荐，由小模型（claude-haiku-4-5）打标签：1,635 道里 1,629 道有标签，花费 $5.81。标签后的数字是这一类的题数。</p>
+    </article>
+
+    <article class="finding" aria-labelledby="q3-title">
+      <h3 id="q3-title">
+        <span class="en">The round wrote 6 rules and 1 hook</span>
+        <span class="zh" lang="zh-CN">这一轮写进了 6 条规则和 1 个钩子</span>
+      </h3>
+      <p class="scope"><span class="en">Rules reworded in general terms</span><span class="zh" lang="zh-CN">规则按通用措辞转述</span></p>
+      <ol class="rules">
+        <li><span class="en">State the current situation and the mechanism before the point to decide.</span><span class="zh" lang="zh-CN">题干先写现状和机制，再写要裁的点。</span></li>
+        <li><span class="en">When recommending to defer, keep the old path, hand the owner a manual step or file a ticket, say why. If you can’t, recommend the other option.</span><span class="zh" lang="zh-CN">推荐推迟、保留旧路径、请机主动手、另开票时，写出理由；写不出来，就推荐另一边。</span></li>
+        <li><span class="en">For a structural decision, say which dimension changes and how new cases plug in.</span><span class="zh" lang="zh-CN">结构类决定的选项，写明哪一维变化、新情况怎么接入。</span></li>
+        <li><span class="en">Recommend one PR for changes to the same concern.</span><span class="zh" lang="zh-CN">同一关注点的改动，推荐放在一个 PR 里。</span></li>
+        <li><span class="en">When the same kind of problem comes up a second time, offer a structural audit as an option.</span><span class="zh" lang="zh-CN">同类问题第二次出现时，选项里放上结构审计。</span></li>
+        <li><span class="en">When evidence can’t be collected, first add a way to inject it; waive or split the ticket only if that fails.</span><span class="zh" lang="zh-CN">证据取不到时，先补上注入入口；做不到再豁免或拆票。</span></li>
+      </ol>
+      <h4 class="h-sub"><span class="en">The hook, in one real session</span><span class="zh" lang="zh-CN">钩子在一次真实会话里</span></h4>
+      <ol class="hook-demo">
+        <li><span class="hd-state hd-block"><span class="en">Blocked</span><span class="zh" lang="zh-CN">被拦下</span></span><span><span class="en">The agent sends its first question. The hook stops it and hands back the checklist.</span><span class="zh" lang="zh-CN">agent 发出第一道题，钩子拦下它，把清单交回去。</span></span></li>
+        <li><span class="hd-state"><span class="en">Rewritten</span><span class="zh" lang="zh-CN">按清单重写</span></span><span><span class="en">The agent rewrites the question: current state, mechanism, then the point to decide.</span><span class="zh" lang="zh-CN">agent 按清单把题干改成：现状、机制、要裁的点。</span></span></li>
+        <li><span class="hd-state hd-ok"><span class="en">Allowed</span><span class="zh" lang="zh-CN">放行</span></span><span><span class="en">The rewrite goes through <span class="hd-time">28 s</span> after the first try.</span><span class="zh" lang="zh-CN">改好的题在第一次发出后 <span class="hd-time">28 秒</span>放行。</span></span></li>
+      </ol>
+      <p class="note en">Recreated from the timestamps of one real session; the question itself isn’t shown.</p>
+      <p class="note zh" lang="zh-CN">按一次真实会话的时间戳复现，不展示题目原文。</p>
+    </article>
+
+    <article class="finding finding-lever" aria-labelledby="q4-title">
+      <h3 id="q4-title">
+        <span class="en">Why write rules at all?</span>
+        <span class="zh" lang="zh-CN">为什么要写规则？</span>
+      </h3>
+      <p class="scope" style="--accent: var(--amber); --accent-fill: var(--amber-fill)"><span class="en">agent-eval · planning · 3 real cases · 156 runs</span><span class="zh" lang="zh-CN">agent-eval · 计划题 · 3 个真实案例 · 156 次运行</span></p>
+      <div class="lever-body">
+        <p class="en">In the author’s agent-eval runs, no model did it the author’s way: 0 of 156. All three cases turned on the author’s own engineering preferences, and none of them was written down in the repository or its rules.</p>
+        <p class="zh" lang="zh-CN">在作者的 agent-eval 计划题里，没有一次运行做到作者本人的做法：0/156。三道题考的都是作者个人的工程偏好，而这些偏好在仓库和规范里一个字都没写。</p>
+        <p class="en"><a href="../agent-eval/#results">See what agent-eval found</a></p>
+        <p class="zh" lang="zh-CN"><a href="../agent-eval/#results">看 agent-eval 测出了什么</a></p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="section reqs compact" id="requirements" aria-labelledby="reqs-title">
+  <div class="wrap">
+    <h2 id="reqs-title"><span class="en">Requirements</span><span class="zh" lang="zh-CN">运行要求</span></h2>
+    <div class="req">
+      <ul>
+        <li>Claude Code</li>
+        <li><span class="en">Python 3.11+ or <a href="https://docs.astral.sh/uv/">uv</a></span><span class="zh" lang="zh-CN">Python 3.11+ 或 <a href="https://docs.astral.sh/uv/">uv</a></span></li>
+        <li><code>node</code></li>
+        <li><span class="en">The <code>claude</code> CLI, for the classifier</span><span class="zh" lang="zh-CN"><code>claude</code> 命令行工具，分类时要用</span></li>
+        <li><span class="en">It reviews Claude Code’s questionnaire records. Codex asks in plain text with no structured answers, so it’s out of scope.</span><span class="zh" lang="zh-CN">复盘的是 Claude Code 的问卷记录；Codex 用自然语言提问、没有结构化答案，不在范围内。</span></li>
+      </ul>
+    </div>
+    <p class="where-note en"><span class="nb">questionnaire-review</span> runs where your logs are: Claude Code on your own computer. In claude.ai chat or Cowork the skill loads, but it can reach neither your logs nor the command-line tools.</p>
+    <p class="where-note zh" lang="zh-CN"><span class="nb">questionnaire-review</span> 要在日志所在的地方运行：你自己电脑上的 Claude Code。在 claude.ai 网页聊天或 Cowork 里，skill 能加载，但既读不到本机日志，也调不了命令行工具。</p>
+  </div>
+</section>
+
+<section class="section privacy" id="privacy" aria-labelledby="privacy-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="privacy-title">
+        <span class="en">Your logs stay on your computer</span>
+        <span class="zh" lang="zh-CN">日志留在你自己的电脑上</span>
+      </h2>
+      <p class="en"><strong>No server, no account, no telemetry, and nothing is sent to the author.</strong> A step that calls an AI model puts only what is listed below into the prompt, and sends it to the provider you chose for that step through your own <code>claude</code> or <code>codex</code> login, like any prompt you type, or through your own model gateway if you set one.</p>
+      <p class="zh" lang="zh-CN"><strong>没有服务器、没有账号、没有遥测，也不向作者发送任何数据。</strong>需要调用模型的步骤，只把下面列出的内容放进提示词，用你自己的 <code>claude</code> 或 <code>codex</code> 登录发给你为这一步选的服务商，和你平时输入提示词一样；如果你设了自己的模型网关，就经过网关。</p>
+    </div>
+
+    <div class="flow" role="table" aria-labelledby="privacy-title">
+      <div class="flow-head" role="row">
+        <span role="columnheader"><span class="en">Step</span><span class="zh" lang="zh-CN">步骤</span></span>
+        <span role="columnheader"><span class="en">What it sends</span><span class="zh" lang="zh-CN">发送的内容</span></span>
+        <span role="columnheader"><span class="en">To whom</span><span class="zh" lang="zh-CN">发给谁</span></span>
+      </div>
+      <div class="flow-group" role="rowgroup">
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>extract</code> <code>stats</code> <code>leads</code></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. Reads your Claude Code session logs; <code>leads</code> replaces secret-shaped strings with [redacted].</span><span class="zh" lang="zh-CN">不发送。读取 Claude Code 会话日志；<code>leads</code> 会把疑似密钥的字符串替换成 [redacted]。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>classify</code></span>
+          <span role="cell" class="f-what"><span class="en">Each question (first 600 characters), its options, which one was recommended, your answer (first 600 characters) and whether you took the recommendation. 25 questions per call.</span><span class="zh" lang="zh-CN">每道题（前 600 字符）、选项、推荐的是哪个、你的回答（前 600 字符），以及你是否照推荐选。每次 25 道。</span></span>
+          <span role="cell" class="f-to"><span class="en">Anthropic, through <code>claude -p</code> with no tools (Claude Haiku by default)</span><span class="zh" lang="zh-CN">Anthropic，经 <code>claude -p</code>，不带工具（默认 Claude Haiku）</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><span class="en">the hook</span><span class="zh" lang="zh-CN">钩子</span></span>
+          <span role="cell" class="f-what"><span class="en">Nothing over the network. The checklist it returns becomes part of that Claude conversation. It runs only in a project where you registered it; installing the plugin doesn’t.</span><span class="zh" lang="zh-CN">不走网络。它退回的清单会成为那段 Claude 对话的一部分。只在你登记过它的项目里运行，装插件本身不会登记。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+      </div>
+    </div>
+
+    <p class="note installer-note en"><code>npx skills</code> is Vercel’s installer. By default it reports each install (repository, skill and agent names) to skills.sh; the <code>DISABLE_TELEMETRY=1</code> in the copied text turns that off. The plugin route doesn’t use it.</p>
+    <p class="note installer-note zh" lang="zh-CN"><code>npx skills</code> 是 Vercel 的安装工具，默认会向 skills.sh 报告一次安装（仓库名、skill 名、agent 名）。复制内容里的 <code>DISABLE_TELEMETRY=1</code> 把它关掉。插件方式不经过它。</p>
+    <p class="links-row">
+      <a href="https://github.com/luoy2/skills/blob/main/PRIVACY.md"><span class="en">Privacy policy</span><span class="zh" lang="zh-CN">隐私政策</span></a>
+      <a href="https://github.com/luoy2/skills#what-it-reads-and-where-it-sends-data"><span class="en">Every step in the README</span><span class="zh" lang="zh-CN">README 里的逐步说明</span></a>
+    </p>
+  </div>
+</section>
+
+<section class="section others compact" aria-labelledby="others-title">
+  <div class="wrap">
+    <h2 id="others-title"><span class="en">The other two skills</span><span class="zh" lang="zh-CN">另外两个 skill</span></h2>
+    <div class="other-grid">
+      <a class="other-card" href="../agent-eval/" style="--accent: var(--amber); --accent-fill: var(--amber-fill)">
+        <span class="oc-title"><span class="en">New model dropped. Switch or stay?</span><span class="zh" lang="zh-CN">新模型出来了，换不换？</span></span>
+        <span class="oc-foot"><span class="skill-tag" style="--accent: var(--amber); --accent-fill: var(--amber-fill)"><span class="dot" aria-hidden="true"></span>agent-eval</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </a>
+      <a class="other-card" href="../i-have-ocd/" style="--accent: var(--pink); --accent-fill: var(--pink)">
+        <span class="oc-title"><span class="en">One main line. Everything else gets one line.</span><span class="zh" lang="zh-CN">一条主线，别的记一行</span></span>
+        <span class="oc-foot"><span class="skill-tag" style="--accent: var(--pink); --accent-fill: var(--pink)"><span class="dot" aria-hidden="true"></span>i-have-ocd</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </a>
+    </div>
+    <p class="back-home"><a href="../"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">All three skills, one install</span><span class="zh" lang="zh-CN">三个 skill 全览，一次装好</span></a></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-row">
+    <p class="footer-brand">
+      <span class="en">Agent Retro is the <code>luoy2-skills</code> plugin, by <a href="https://github.com/luoy2">luoy2</a>.</span>
+      <span class="zh" lang="zh-CN">Agent Retro 即 <code>luoy2-skills</code> 插件，作者 <a href="https://github.com/luoy2">luoy2</a>。</span>
+    </p>
+    <ul class="footer-links">
+      <li><a href="../"><span class="en">All three skills</span><span class="zh" lang="zh-CN">三个 skill</span></a></li>
+      <li><a href="https://github.com/luoy2/skills">GitHub</a></li>
+      <li><a href="https://github.com/luoy2/skills/issues"><span class="en">Issues</span><span class="zh" lang="zh-CN">问题反馈</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/security/advisories/new"><span class="en">Report a security problem</span><span class="zh" lang="zh-CN">私下报告安全问题</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/blob/main/PRIVACY.md"><span class="en">Privacy</span><span class="zh" lang="zh-CN">隐私政策</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/blob/main/LICENSE"><span class="en">MIT License</span><span class="zh" lang="zh-CN">MIT 许可</span></a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="../main.js" defer></script>
+</body>
+</html>

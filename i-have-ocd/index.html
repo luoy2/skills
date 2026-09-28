@@ -1,35 +1,35 @@
 <!doctype html>
-<html lang="en" data-title-en="Agent Retro: three skills from a year of Claude Code" data-title-zh="Agent Retro：用了一年 Claude Code，攒下的三个 skill">
+<html lang="en" data-title-en="i-have-ocd: one main line, everything else gets one line" data-title-zh="i-have-ocd：一条主线，别的记一行">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Retro: three skills from a year of Claude Code</title>
-<meta name="description" content="A year of Claude Code. Three skills I kept: agent-eval, questionnaire-review and i-have-ocd. They run on your computer. Nothing comes back to me.">
-<link rel="canonical" href="https://luoy2.github.io/skills/">
+<title>i-have-ocd: one main line, everything else gets one line</title>
+<meta name="description" content="Agents report every finding and ask about it on the spot. i-have-ocd keeps one main line; every other finding is written down in one line and planned in batches later. Reads no logs, sends nothing.">
+<link rel="canonical" href="https://luoy2.github.io/skills/i-have-ocd/">
 <meta name="theme-color" content="#0A0A0F" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#F3F2EE" media="(prefers-color-scheme: light)">
 <meta name="color-scheme" content="dark light">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Agent Retro">
-<meta property="og:title" content="Agent Retro: three skills from a year of Claude Code">
-<meta property="og:description" content="agent-eval, questionnaire-review and i-have-ocd. They run on your computer. Nothing comes back to me.">
-<meta property="og:url" content="https://luoy2.github.io/skills/">
-<meta property="og:image" content="https://luoy2.github.io/skills/assets/og.png">
+<meta property="og:title" content="i-have-ocd: one main line, everything else gets one line">
+<meta property="og:description" content="Keep one main line. Every other finding gets one line, not a fix or a question on the spot, and is planned in batches later.">
+<meta property="og:url" content="https://luoy2.github.io/skills/i-have-ocd/">
+<meta property="og:image" content="https://luoy2.github.io/skills/assets/og-i-have-ocd.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Agent Retro. A year of Claude Code. Three skills I kept.">
+<meta property="og:image:alt" content="i-have-ocd. One main line. Everything else gets one line.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Agent Retro: three skills from a year of Claude Code">
-<meta name="twitter:description" content="agent-eval, questionnaire-review and i-have-ocd. They run on your computer. Nothing comes back to me.">
-<meta name="twitter:image" content="https://luoy2.github.io/skills/assets/og.png">
-<meta name="twitter:image:alt" content="Agent Retro. A year of Claude Code. Three skills I kept.">
+<meta name="twitter:title" content="i-have-ocd: one main line, everything else gets one line">
+<meta name="twitter:description" content="Keep one main line. Every other finding gets one line, not a fix or a question on the spot, and is planned in batches later.">
+<meta name="twitter:image" content="https://luoy2.github.io/skills/assets/og-i-have-ocd.png">
+<meta name="twitter:image:alt" content="i-have-ocd. One main line. Everything else gets one line.">
 
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="../styles.css">
 <script>
   // Set the language before first paint so a Chinese reader never sees the English flash.
   (function () {
@@ -41,33 +41,20 @@
     } catch (e) {}
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   })();
-  // Sections that moved to a skill page: links shared before the split (/skills/#results) still land there.
-  (function () {
-    var moved = {
-      problem: 'agent-eval/#problem', results: 'agent-eval/#results', 'eval-title': 'agent-eval/#eval-title',
-      'f1-title': 'agent-eval/#f1-title', 'f2-title': 'agent-eval/#f2-title', 'f3-title': 'agent-eval/#f3-title',
-      'f4-title': 'agent-eval/#f4-title', 'f5-title': 'agent-eval/#f5-title',
-      'qr-title': 'questionnaire-review/#qr-title', 'ocd-title': 'i-have-ocd/#ocd-title'
-    };
-    var to = moved[location.hash.slice(1)];
-    if (!to) return;
-    var cut = to.indexOf('#');
-    location.replace(to.slice(0, cut) + location.search + to.slice(cut));
-  })();
 </script>
 </head>
-<body>
+<body class="page-ocd">
 <svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol></svg>
 <a class="skip" href="#main"><span class="en">Skip to content</span><span class="zh" lang="zh-CN">跳到正文</span></a>
 
 <header class="site-header">
   <div class="wrap header-row">
-    <a class="brand" href="./" aria-label="Agent Retro: all three skills">
+    <a class="brand" href="../" aria-label="Agent Retro: all three skills">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--mark-bg)"/><path d="M7.5 16a8.5 8.5 0 1 0 2.6-6.1L7.5 12.4" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 7.2v5.2h5.2" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="2.6" fill="var(--amber-fill)"/></svg>
       <span class="brand-name">Agent Retro</span>
     </a>
     <nav class="site-nav" aria-label="Sections">
-      <a href="#skills"><span class="en">Three skills</span><span class="zh" lang="zh-CN">三个 skill</span></a>
+      <a href="#how"><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></a>
       <a href="#install"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></a>
       <a href="#privacy"><span class="en">Privacy</span><span class="zh" lang="zh-CN">隐私</span></a>
     </nav>
@@ -85,96 +72,41 @@
 
 <main id="main">
 
-<section class="hero home-hero" aria-labelledby="hero-title">
+<section class="hero skill-hero" aria-labelledby="hero-title">
   <div class="wrap">
-    <div class="hero-copy">
-      <h1 id="hero-title">
-        <span class="en">A year of Claude Code. <em>Three skills I kept.</em></span>
-        <span class="zh" lang="zh-CN">用了一年 <span class="nb">Claude Code</span>，<wbr><em>攒下的三个 skill</em></span>
-      </h1>
-      <p class="sub en">They run on your computer. Nothing comes back to me.</p>
-      <p class="sub zh" lang="zh-CN">都在你自己电脑上跑，不发数据给我</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="#install"><span class="en">Install all three</span><span class="zh" lang="zh-CN">三个一起装</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v11m0 0-4.5-4.5M10 15l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-        <a class="btn btn-secondary" href="https://github.com/luoy2/skills">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
-          <span class="en">View on GitHub</span><span class="zh" lang="zh-CN">在 GitHub 上查看</span>
-        </a>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="../"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">All three skills</span><span class="zh" lang="zh-CN">全部三个 skill</span></a>
+      <span class="sep" aria-hidden="true">/</span>
+      <span class="skill-tag" aria-current="page" style="--accent: var(--pink); --accent-fill: var(--pink)"><span class="dot" aria-hidden="true"></span>i-have-ocd</span>
+    </nav>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <h1 id="hero-title">
+          <span class="en">One main line. <em>Everything else gets one line.</em></span>
+          <span class="zh" lang="zh-CN">一条主线，<wbr><em>别的记一行</em></span>
+        </h1>
+        <p class="lead en"><strong>Fix one bug. Get a pile of findings.</strong> Each one comes with a question: fix it now? Every detour looks cheap. Together they scatter your attention, and work that belongs together gets done piecemeal. <span class="nb">i-have-ocd</span> keeps one main line: a title, a done-when criterion and the next step. Everything else gets one line.</p>
+        <p class="lead zh" lang="zh-CN"><strong>修一个 bug，报回来一堆发现。</strong>每个都问你：要不要现在修？每次岔出去看着都不贵，加起来注意力就散了，本该一起规划的活被拆得零零碎碎。<span class="nb">i-have-ocd</span> 只留一条主线：标题、完成标准、下一步。别的发现记一行就走。</p>
+        <p class="hero-meta en">Part of the <code>luoy2-skills</code> plugin · Claude Code and Codex · MIT · runs on your computer and sends nothing to the author</p>
+        <p class="hero-meta zh" lang="zh-CN"><code>luoy2-skills</code> 插件的一部分 · Claude Code 和 Codex · MIT 许可 · 在你的电脑上运行，不向作者发送任何数据</p>
       </div>
-      <p class="hero-meta en">20,405 Claude Code inputs on one Mac since 2025-10-03 · a Claude Code plugin that also works in Codex · MIT</p>
-      <p class="hero-meta zh" lang="zh-CN">2025-10-03 起，一台 Mac 上 20,405 条 Claude Code 输入 · Claude Code 插件，Codex 也能用 · MIT 许可</p>
-    </div>
-    <figure class="hero-video home-video">
-      <div class="video-frame">
-        <video controls playsinline preload="metadata" poster="assets/overview-poster.jpg" aria-label="Overview video" data-aria-en="Overview video" data-aria-zh="总览视频">
-          <source src="assets/overview.mp4" type="video/mp4">
-          <p><a href="assets/overview.mp4"><span class="en">Download the video</span><span class="zh" lang="zh-CN">下载视频</span></a></p>
-        </video>
-      </div>
-      <figcaption>
-        <span class="en">The three skills in 36 seconds. Chinese voice-over; Chinese and English subtitles are in the picture.</span>
-        <span class="zh" lang="zh-CN">36 秒看完三个 skill。中文配音，中英字幕在画面里。</span>
-      </figcaption>
-    </figure>
-  </div>
-</section>
-
-<section class="section entries" id="skills" aria-labelledby="skills-title">
-  <div class="wrap">
-    <div class="section-head">
-      <h2 id="skills-title">
-        <span class="en">Two learn from your own history. One keeps the work on one line.</span>
-        <span class="zh" lang="zh-CN">两个从你的记录里学，<wbr>一个帮你守住主线</span>
-      </h2>
-      <p class="en">Your session logs already say where your agents go wrong: every correction you typed, every recommended option you turned down. <span class="nb">agent-eval</span> and <span class="nb">questionnaire-review</span> read that record on your own computer. <span class="nb">i-have-ocd</span> reads no logs; it keeps you and your agents on one main line while the work happens.</p>
-      <p class="zh" lang="zh-CN">agent 在哪儿出错，你的会话日志里早就记着：你打过的每一句纠正，你没选的每一个推荐选项。<span class="nb">agent-eval</span> 和 <span class="nb">questionnaire-review</span> 在你自己的电脑上读这份记录。<span class="nb">i-have-ocd</span> 不读日志，它在干活的时候让你和 agent 只沿一条主线走。</p>
-    </div>
-    <div class="entry-grid">
-      <article class="entry-card" style="--accent: var(--amber); --accent-fill: var(--amber-fill)" aria-labelledby="e-eval">
-        <div class="entry-media"><img src="assets/agent-eval-poster.jpg" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div>
-        <div class="entry-body">
-          <h3 id="e-eval"><a href="agent-eval/"><span class="en">New model dropped. Switch or stay?</span><span class="zh" lang="zh-CN">新模型出来了，<wbr>换不换？</span></a></h3>
-          <p class="entry-line en">Your own corrections become the test: models and effort levels side by side, scored and priced.</p>
-          <p class="entry-line zh" lang="zh-CN">拿你纠正过 agent 的真实时刻当考题，模型和 effort 排开跑，分数和花费一起出。</p>
-          <p class="entry-fact"><span class="fact"><span class="en">Effort medium → max: score 39% → 43%, cost per run $1.63 → $4.38</span><span class="zh" lang="zh-CN">effort 从 medium 开到 max：得分 39% → 43%，每次花费 $1.63 → $4.38</span></span><span class="fact-scope"><span class="en">Planning · 3 real cases · 156 runs</span><span class="zh" lang="zh-CN">计划题 · 3 个真实案例 · 156 次运行</span></span></p>
-          <div class="entry-foot"><span class="skill-tag" style="--accent: var(--amber); --accent-fill: var(--amber-fill)"><span class="dot" aria-hidden="true"></span>agent-eval</span><span class="entry-go"><span class="en">Watch the video · install</span><span class="zh" lang="zh-CN">看视频 · 安装</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <figure class="hero-video">
+        <div class="video-frame">
+          <video controls playsinline preload="metadata" poster="../assets/i-have-ocd-poster.jpg" aria-label="i-have-ocd video" data-aria-en="i-have-ocd video" data-aria-zh="i-have-ocd 介绍视频">
+            <source src="../assets/i-have-ocd.mp4" type="video/mp4">
+            <p><a href="../assets/i-have-ocd.mp4"><span class="en">Download the video</span><span class="zh" lang="zh-CN">下载视频</span></a></p>
+          </video>
         </div>
-      </article>
-      <article class="entry-card" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)" aria-labelledby="e-qr">
-        <div class="entry-media"><img src="assets/questionnaire-review-poster.jpg" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div>
-        <div class="entry-body">
-          <h3 id="e-qr"><a href="questionnaire-review/"><span class="en">The pick you keep overriding? Make it a rule.</span><span class="zh" lang="zh-CN">你总推翻的推荐，<wbr>写成规则</span></a></h3>
-          <p class="entry-line en">Every two weeks, review the questions your agents asked. Overrides that repeat become rules you approve one by one.</p>
-          <p class="entry-line zh" lang="zh-CN">两周复盘一次 agent 问你的选择题，反复出现的分歧写成规则，你逐条拍板。</p>
-          <p class="entry-fact"><span class="fact"><span class="en">Recommended “later”: taken 36.7%. Recommended “now”: 75.6%.</span><span class="zh" lang="zh-CN">推荐「以后再做」只有 36.7% 被照选，推荐「现在就做」是 75.6%</span></span><span class="fact-scope"><span class="en">The author’s own logs · one two-week round · one machine</span><span class="zh" lang="zh-CN">作者自己的日志 · 一轮两周 · 一台机器</span></span></p>
-          <div class="entry-foot"><span class="skill-tag" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)"><span class="dot" aria-hidden="true"></span>questionnaire-review</span><span class="entry-go"><span class="en">Watch the video · install</span><span class="zh" lang="zh-CN">看视频 · 安装</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-        </div>
-      </article>
-      <article class="entry-card" style="--accent: var(--pink); --accent-fill: var(--pink)" aria-labelledby="e-ocd">
-        <div class="entry-media"><img src="assets/i-have-ocd-poster.jpg" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div>
-        <div class="entry-body">
-          <h3 id="e-ocd"><a href="i-have-ocd/"><span class="en">One main line. Everything else gets one line.</span><span class="zh" lang="zh-CN">一条主线，<wbr>别的记一行</span></a></h3>
-          <p class="entry-line en">Keep one main line. Every other finding is written down in one line, not fixed or asked about on the spot, and planned in batches later.</p>
-          <p class="entry-line zh" lang="zh-CN">只留一条主线，别的发现记一行，不当场修也不当场问，回头成批排。</p>
-          <p class="entry-fact"><span class="fact"><span class="en">Next: rerun both judges on case 3 · side +2</span><span class="zh" lang="zh-CN">下一步：在第 3 题上重跑两个 judge · side +2</span></span><span class="fact-scope"><span class="en">Example of how a reply ends, not a real session</span><span class="zh" lang="zh-CN">回复结尾的示例，不是真实会话</span></span></p>
-          <div class="entry-foot"><span class="skill-tag" style="--accent: var(--pink); --accent-fill: var(--pink)"><span class="dot" aria-hidden="true"></span>i-have-ocd</span><span class="entry-go"><span class="en">Watch the video · install</span><span class="zh" lang="zh-CN">看视频 · 安装</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-        </div>
-      </article>
+        <figcaption>
+          <span class="en">Chinese voice-over. Chinese and English subtitles are in the picture.</span>
+          <span class="zh" lang="zh-CN">中文配音，中英字幕在画面里。</span>
+        </figcaption>
+      </figure>
     </div>
-  </div>
-</section>
-
-<section class="section install" id="install" aria-labelledby="install-title">
-  <div class="wrap">
-    <div class="section-head">
-      <h2 id="install-title">
-        <span class="en">One plugin. All three skills.</span>
-        <span class="zh" lang="zh-CN">一个插件，<wbr>三个 skill</span>
-      </h2>
-    </div>
-    <div class="install-card">
+    <div class="install-card" id="install" aria-labelledby="install-title">
       <div class="ic-head">
         <div>
+          <h2 id="install-title"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></h2>
           <p class="en">Paste it into Claude Code or Codex. It names the plugin and gives the command for each agent. One plugin, all three skills.</p>
     <p class="zh" lang="zh-CN">粘到 Claude Code 或 Codex 里。里面写了装哪个插件，以及每种 agent 该跑的命令。一个插件，三个 skill 一起装上。</p>
         </div>
@@ -191,8 +123,8 @@
 <span class="it-k">Claude Code：</span>claude plugin marketplace add luoy2/skills &amp;&amp; claude plugin install luoy2-skills@luoy2（装完输入 /reload-plugins）
 <span class="it-k">Codex：</span>codex plugin marketplace add luoy2/skills &amp;&amp; codex plugin add luoy2-skills@luoy2
 <span class="it-k">其他 agent：</span>DISABLE_TELEMETRY=1 npx -y skills@1.7.0 add luoy2/skills --skill agent-eval questionnaire-review i-have-ocd -a &lt;你的 agent&gt; -g -y</code></pre>
-      <p class="ic-then en"><strong>Then ask in plain words,</strong> for example <q>use agent-eval to test the new model on this repo</q>. The skill walks you through the rest.</p>
-      <p class="ic-then zh" lang="zh-CN"><strong>装好后直接用自然语言说，</strong>比如<q>用 agent-eval 在这个仓库上测一下新模型</q>。skill 会带你走完剩下的步骤。</p>
+      <p class="ic-then en"><strong>Then say:</strong> <q>Main line: … Done when: …</q> or just <q>I have OCD</q>, <q>keep me focused</q>.</p>
+      <p class="ic-then zh" lang="zh-CN"><strong>装好后这样说：</strong><q>主线是：……，完成标准：……</q>，或者直接说<q>我有点 lost</q><q>分叉太多</q>。</p>
       <details class="ic-more">
         <summary><span class="en">Or run it yourself</span><span class="zh" lang="zh-CN">或者自己动手装</span></summary>
         <div class="ic-more-body">
@@ -236,8 +168,70 @@
       </details>
       <p class="sr-only" aria-live="polite" id="copy-status"></p>
     </div>
-    <p class="where-note en"><span class="nb">agent-eval</span> and <span class="nb">questionnaire-review</span> run where your logs are: Claude Code or Codex on your own computer. In claude.ai chat or Cowork the skills load, but they can reach neither your logs nor the command-line tools.</p>
-    <p class="where-note zh" lang="zh-CN"><span class="nb">agent-eval</span> 和 <span class="nb">questionnaire-review</span> 要在日志所在的地方运行：你自己电脑上的 Claude Code 或 Codex。在 claude.ai 网页聊天或 Cowork 里，skill 能加载，但既读不到本机日志，也调不了命令行工具。</p>
+  </div>
+</section>
+
+<section class="section how" id="how" aria-labelledby="ocd-title">
+  <div class="wrap how-grid">
+    <div class="how-copy">
+      <h2 id="ocd-title">
+        <span class="en">Keep one main line and park every other finding</span>
+        <span class="zh" lang="zh-CN">只走一条主线，<wbr>别的发现先记下来</span>
+      </h2>
+      <div class="mock mock-ocd" role="group" aria-label="Example store and reply ending" data-i18n-aria="mock-ocd">
+        <p class="mock-label"><span class="en">Example · the store</span><span class="zh" lang="zh-CN">示例 · 记录文件</span></p>
+        <dl class="ocd-lines">
+          <div class="ocd-main"><dt><span class="en">Main line</span><span class="zh" lang="zh-CN">主线</span></dt><dd><span class="en">Ship the eval report · done when: report archived</span><span class="zh" lang="zh-CN">发布评测报告 · 完成标准：报告已归档</span></dd></div>
+          <div><dt><span class="en">Parked</span><span class="zh" lang="zh-CN">停放</span></dt><dd><span class="en">Date test fails near DST: false CI alarms</span><span class="zh" lang="zh-CN">夏令时前后日期测试会挂：CI 误报</span> <span class="where">tests/test_dates.py:88</span></dd></div>
+          <div><dt><span class="en">Parked</span><span class="zh" lang="zh-CN">停放</span></dt><dd><span class="en">Docs still show the old export command: copying it fails</span><span class="zh" lang="zh-CN">文档里还是旧的导出命令：照抄会报错</span> <span class="where">docs/cli.md</span></dd></div>
+        </dl>
+        <p class="mock-label mock-sub"><span class="en">How the reply ends</span><span class="zh" lang="zh-CN">回复的结尾</span></p>
+        <p class="ocd-next"><span class="en">Next: rerun both judges on case 3</span><span class="zh" lang="zh-CN">下一步：在第 3 题上重跑两个 judge</span> <span class="side">side +2</span></p>
+      </div>
+      <div class="get">
+        <h3 class="h-sub"><span class="en">What you get</span><span class="zh" lang="zh-CN">你会得到</span></h3>
+        <p class="en">Fewer detours, and the side work planned together instead of piecemeal. It reads no logs and sends nothing.</p>
+        <p class="zh" lang="zh-CN">少走岔路；支线的活攒到一起规划，不再零敲碎打。它不读日志，也不发送任何数据。</p>
+      </div>
+    </div>
+    <div class="skill how-steps">
+      <h3 class="h-sub"><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></h3>
+      <ol class="steps">
+        <li>
+          <p class="en">Every new item is sorted as <strong>main line</strong>, <strong>urgent</strong> or <strong>parked</strong>.</p>
+          <p class="zh" lang="zh-CN">每个新冒出来的事，先分成<strong>主线</strong>、<strong>紧急</strong>、<strong>停放</strong>三类。</p>
+        </li>
+        <li>
+          <p class="en">Urgent means money or position risk, a production incident, a leaked credential, or an identity check.</p>
+          <p class="zh" lang="zh-CN">紧急只有这几种：资金或持仓风险、线上事故、凭据泄露、需要你本人做的身份验证。</p>
+        </li>
+        <li>
+          <p class="en">A parked item is one line: what it is, why it matters, where it was seen. It is not fixed or asked about on the spot.</p>
+          <p class="zh" lang="zh-CN">停放就是记一行：是什么、为什么要紧、在哪儿看到的。不当场修，也不当场问。</p>
+        </li>
+        <li>
+          <p class="en">Each reply ends with one next step and a <code class="nb">side +N</code> count.</p>
+          <p class="zh" lang="zh-CN">每条回复都以一个下一步和 <code class="nb">side +N</code> 计数收尾。</p>
+        </li>
+        <li>
+          <p class="en">When you ask for a review, parked items are grouped and planned in batches, with the decisions as one set of questions.</p>
+          <p class="zh" lang="zh-CN">你要看支线时，停放的条目按领域分组、成批规划，要你决定的事一次问完。</p>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section reqs compact" id="requirements" aria-labelledby="reqs-title">
+  <div class="wrap">
+    <h2 id="reqs-title"><span class="en">Requirements</span><span class="zh" lang="zh-CN">运行要求</span></h2>
+    <div class="req">
+      <ul>
+        <li><span class="en">Nothing extra</span><span class="zh" lang="zh-CN">不需要额外工具</span></li>
+        <li><span class="en">Keeps its state in one Markdown file per project under <code>~/.local/state/i-have-ocd/</code>, or in focus tools if your session has them</span><span class="zh" lang="zh-CN">状态存在 <code>~/.local/state/i-have-ocd/</code> 下，每个项目一个 Markdown 文件；会话里有 focus 工具时就用那些工具</span></li>
+      </ul>
+    </div>
+
   </div>
 </section>
 
@@ -245,24 +239,51 @@
   <div class="wrap">
     <div class="section-head">
       <h2 id="privacy-title">
-        <span class="en">Your logs stay on your computer</span>
-        <span class="zh" lang="zh-CN">日志留在你自己的电脑上</span>
+        <span class="en">It reads no logs and sends nothing</span>
+        <span class="zh" lang="zh-CN">不读日志，<wbr>不发数据</span>
       </h2>
-      <p class="en"><strong>No server, no account, no telemetry, and nothing is sent to the author.</strong> A step that calls an AI model puts only what is listed below into the prompt, and sends it to the provider you chose for that step through your own <code>claude</code> or <code>codex</code> login, like any prompt you type, or through your own model gateway if you set one.</p>
-      <p class="zh" lang="zh-CN"><strong>没有服务器、没有账号、没有遥测，也不向作者发送任何数据。</strong>需要调用模型的步骤，只把下面列出的内容放进提示词，用你自己的 <code>claude</code> 或 <code>codex</code> 登录发给你为这一步选的服务商，和你平时输入提示词一样；如果你设了自己的模型网关，就经过网关。</p>
+      <p class="en"><strong>No server, no account, no telemetry, and nothing is sent to the author.</strong> i-have-ocd works inside your conversation with the agent. It reads no logs and calls no model of its own; its state is one Markdown file on your computer, or the focus tools your session already has.</p>
+      <p class="zh" lang="zh-CN"><strong>没有服务器、没有账号、没有遥测，也不向作者发送任何数据。</strong>i-have-ocd 在你和 agent 的对话里起作用：不读日志，也不自己调用模型；状态存在你电脑上的一个 Markdown 文件里，或者你会话里已有的 focus 工具里。</p>
     </div>
-    <h3 class="h-sub"><span class="en">Step by step, per skill</span><span class="zh" lang="zh-CN">每个 skill 的逐步说明</span></h3>
-    <ul class="privacy-links">
-      <li><a href="agent-eval/#privacy"><span class="skill-tag" style="--accent: var(--amber); --accent-fill: var(--amber-fill)"><span class="dot" aria-hidden="true"></span>agent-eval</span><span class="pl-what"><span class="en">Reads the logs of the projects you name. Sends messages to a small model for labels, and cases and answers to the models in your config.</span><span class="zh" lang="zh-CN">读取你指定项目的日志。消息发给小模型打标签，题目和答案发给你配置里的模型。</span></span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-      <li><a href="questionnaire-review/#privacy"><span class="skill-tag" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)"><span class="dot" aria-hidden="true"></span>questionnaire-review</span><span class="pl-what"><span class="en">Reads your Claude Code session logs. Sends each question and your answer to Claude Haiku (by default) for a label.</span><span class="zh" lang="zh-CN">读取 Claude Code 会话日志。每道题和你的回答发给 Claude Haiku（默认）打标签。</span></span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-      <li><a href="i-have-ocd/#privacy"><span class="skill-tag" style="--accent: var(--pink); --accent-fill: var(--pink)"><span class="dot" aria-hidden="true"></span>i-have-ocd</span><span class="pl-what"><span class="en">Reads no logs. Sends nothing.</span><span class="zh" lang="zh-CN">不读日志，不发送任何内容。</span></span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-    </ul>
+
+    <div class="flow" role="table" aria-labelledby="privacy-title">
+      <div class="flow-head" role="row">
+        <span role="columnheader"><span class="en">Step</span><span class="zh" lang="zh-CN">步骤</span></span>
+        <span role="columnheader"><span class="en">What it sends</span><span class="zh" lang="zh-CN">发送的内容</span></span>
+        <span role="columnheader"><span class="en">To whom</span><span class="zh" lang="zh-CN">发给谁</span></span>
+      </div>
+      <div class="flow-group" role="rowgroup">
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><span class="en">every step</span><span class="zh" lang="zh-CN">所有步骤</span></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. It reads no logs.</span><span class="zh" lang="zh-CN">不发送。它不读任何日志。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+      </div>
+    </div>
+
     <p class="note installer-note en"><code>npx skills</code> is Vercel’s installer. By default it reports each install (repository, skill and agent names) to skills.sh; the <code>DISABLE_TELEMETRY=1</code> in the copied text turns that off. The plugin route doesn’t use it.</p>
     <p class="note installer-note zh" lang="zh-CN"><code>npx skills</code> 是 Vercel 的安装工具，默认会向 skills.sh 报告一次安装（仓库名、skill 名、agent 名）。复制内容里的 <code>DISABLE_TELEMETRY=1</code> 把它关掉。插件方式不经过它。</p>
     <p class="links-row">
       <a href="https://github.com/luoy2/skills/blob/main/PRIVACY.md"><span class="en">Privacy policy</span><span class="zh" lang="zh-CN">隐私政策</span></a>
       <a href="https://github.com/luoy2/skills#what-it-reads-and-where-it-sends-data"><span class="en">Every step in the README</span><span class="zh" lang="zh-CN">README 里的逐步说明</span></a>
     </p>
+  </div>
+</section>
+
+<section class="section others compact" aria-labelledby="others-title">
+  <div class="wrap">
+    <h2 id="others-title"><span class="en">The other two skills</span><span class="zh" lang="zh-CN">另外两个 skill</span></h2>
+    <div class="other-grid">
+      <a class="other-card" href="../agent-eval/" style="--accent: var(--amber); --accent-fill: var(--amber-fill)">
+        <span class="oc-title"><span class="en">New model dropped. Switch or stay?</span><span class="zh" lang="zh-CN">新模型出来了，换不换？</span></span>
+        <span class="oc-foot"><span class="skill-tag" style="--accent: var(--amber); --accent-fill: var(--amber-fill)"><span class="dot" aria-hidden="true"></span>agent-eval</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </a>
+      <a class="other-card" href="../questionnaire-review/" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)">
+        <span class="oc-title"><span class="en">The pick you keep overriding? Make it a rule.</span><span class="zh" lang="zh-CN">你总推翻的推荐，写成规则</span></span>
+        <span class="oc-foot"><span class="skill-tag" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)"><span class="dot" aria-hidden="true"></span>questionnaire-review</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </a>
+    </div>
+    <p class="back-home"><a href="../"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4m0 0 5-5m-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">All three skills, one install</span><span class="zh" lang="zh-CN">三个 skill 全览，一次装好</span></a></p>
   </div>
 </section>
 
@@ -275,7 +296,7 @@
       <span class="zh" lang="zh-CN">Agent Retro 即 <code>luoy2-skills</code> 插件，作者 <a href="https://github.com/luoy2">luoy2</a>。</span>
     </p>
     <ul class="footer-links">
-      <li><a href="./"><span class="en">All three skills</span><span class="zh" lang="zh-CN">三个 skill</span></a></li>
+      <li><a href="../"><span class="en">All three skills</span><span class="zh" lang="zh-CN">三个 skill</span></a></li>
       <li><a href="https://github.com/luoy2/skills">GitHub</a></li>
       <li><a href="https://github.com/luoy2/skills/issues"><span class="en">Issues</span><span class="zh" lang="zh-CN">问题反馈</span></a></li>
       <li><a href="https://github.com/luoy2/skills/security/advisories/new"><span class="en">Report a security problem</span><span class="zh" lang="zh-CN">私下报告安全问题</span></a></li>
@@ -285,6 +306,6 @@
   </div>
 </footer>
 
-<script src="main.js" defer></script>
+<script src="../main.js" defer></script>
 </body>
 </html>
