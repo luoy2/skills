@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Retro: test new models on your own problems</title>
+<meta name="description" content="A new model is out. Do you switch, and at what thinking effort? Agent Retro turns the moments you corrected your agents into an eval, and runs it on your computer. A Claude Code plugin that also works in Codex.">
+<link rel="canonical" href="https://luoy2.github.io/skills/">
+<meta name="theme-color" content="#0A0A0F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F2EE" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Agent Retro">
+<meta property="og:title" content="Agent Retro: test new models on your own problems">
+<meta property="og:description" content="Turn the moments you corrected your agents into an eval. Score and cost for every model and thinking effort, run on your own computer.">
+<meta property="og:url" content="https://luoy2.github.io/skills/">
+<meta property="og:image" content="https://luoy2.github.io/skills/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agent Retro. A new model is out. Do you switch? Test it on your own problems.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Agent Retro: test new models on your own problems">
+<meta name="twitter:description" content="Turn the moments you corrected your agents into an eval. Score and cost for every model and thinking effort, run on your own computer.">
+<meta name="twitter:image" content="https://luoy2.github.io/skills/assets/og.png">
+<meta name="twitter:image:alt" content="Agent Retro. A new model is out. Do you switch? Test it on your own problems.">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Set the language before first paint so a Chinese reader never sees the English flash.
+  (function () {
+    var lang = 'en';
+    try {
+      var q = new URLSearchParams(location.search).get('lang');
+      if (q === 'zh' || q === 'en') { lang = q; }
+      else { var s = localStorage.getItem('agent-retro-lang'); if (s === 'zh' || s === 'en') lang = s; }
+    } catch (e) {}
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  })();
+</script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false"><symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol></svg>
+<a class="skip" href="#main"><span class="en">Skip to content</span><span class="zh" lang="zh-CN">跳到正文</span></a>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="./" aria-label="Agent Retro">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--mark-bg)"/><path d="M7.5 16a8.5 8.5 0 1 0 2.6-6.1L7.5 12.4" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 7.2v5.2h5.2" fill="none" stroke="var(--clay)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="2.6" fill="var(--amber-fill)"/></svg>
+      <span class="brand-name">Agent Retro</span>
+    </a>
+    <nav class="site-nav" aria-label="Sections">
+      <a href="#skills"><span class="en">Skills</span><span class="zh" lang="zh-CN">三个 skill</span></a>
+      <a href="#results"><span class="en">Results</span><span class="zh" lang="zh-CN">实测结果</span></a>
+      <a href="#install"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></a>
+      <a href="#privacy"><span class="en">Privacy</span><span class="zh" lang="zh-CN">隐私</span></a>
+    </nav>
+    <div class="header-actions">
+      <div class="lang-toggle" role="group" data-i18n-aria="lang-group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true" lang="en">EN</button>
+        <button type="button" data-lang="zh" aria-pressed="false" lang="zh-CN">中文</button>
+      </div>
+      <a class="icon-link" href="https://github.com/luoy2/skills" data-i18n-aria="github" aria-label="luoy2/skills on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- Hero -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1 id="hero-title">
+        <span class="en">A new model is out. <em>Do you switch?</em></span>
+        <span class="zh" lang="zh-CN">新模型出来了，<em>换不换？</em></span>
+      </h1>
+      <p class="lead en"><strong>Test it on your own problems.</strong> Agent Retro turns the moments you corrected your agents into an eval, reruns them on the new model at the thinking efforts you pick, and tells you what every run scored and what it cost.</p>
+      <p class="lead zh" lang="zh-CN"><strong>拿你自己的问题去测。</strong>Agent Retro 把你纠正过 agent 的真实时刻做成评测集，让新模型在你选的各档 effort 上重跑，告诉你每一次得了多少分、花了多少钱。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#install">
+          <span class="en">Install the plugin</span><span class="zh" lang="zh-CN">安装插件</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v11m0 0-4.5-4.5M10 15l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/luoy2/skills">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
+          <span class="en">View on GitHub</span><span class="zh" lang="zh-CN">在 GitHub 上查看</span>
+        </a>
+      </div>
+      <p class="hero-meta en">Claude Code plugin · works in Codex · MIT · runs on your computer and sends nothing to the author</p>
+      <p class="hero-meta zh" lang="zh-CN">Claude Code 插件 · Codex 也能用 · MIT 许可 · 在你的电脑上运行，不向作者发送任何数据</p>
+    </div>
+    <figure class="hero-video">
+      <div class="video-frame">
+        <video controls playsinline preload="metadata" poster="assets/poster.jpg" data-i18n-aria="video" aria-label="Agent Retro intro video">
+          <source src="assets/intro.mp4" type="video/mp4">
+          <p><a href="assets/intro.mp4">Download the intro video</a></p>
+        </video>
+      </div>
+      <figcaption>
+        <span class="en">Intro video. Captions are burned into the picture.</span>
+        <span class="zh" lang="zh-CN">介绍视频，字幕已内嵌在画面里。</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- The problem -->
+<section class="section problem" id="problem" aria-labelledby="problem-title">
+  <div class="wrap">
+    <div class="problem-grid">
+      <div class="problem-copy">
+        <h2 id="problem-title">
+          <span class="en">Leaderboard scores keep climbing. Does your agent?</span>
+          <span class="zh" lang="zh-CN">榜单分一版比一版高，你的 agent 呢？</span>
+        </h2>
+        <p class="en">Every release brings the same questions. Switch or stay? How should you use it? Which thinking effort, and what will it cost? Is it actually better than what you had?</p>
+        <p class="zh" lang="zh-CN">每次有新模型，问题都是这几个：换不换？怎么用？effort 开到多少，要花多少钱？和原来的比，到底是不是更好？</p>
+        <p class="en">Public benchmarks answer them for someone else’s tasks. A model can top the leaderboard and still feel worse in your repository: vaguer plans, more abstract answers, the same mistake you corrected last month.</p>
+        <p class="zh" lang="zh-CN">公开榜单测的是别人的任务。一个模型可以刷到榜首，放进你的仓库却更难用：计划更空，回答更抽象，上个月纠正过的错又犯一次。</p>
+        <p class="thesis en">The test that answers your questions is built from your own problems.</p>
+        <p class="thesis zh" lang="zh-CN">能回答这些问题的测试，只能用你自己的问题来做。</p>
+      </div>
+
+      <figure class="drift">
+        <div class="drift-legend" aria-hidden="true">
+          <span class="key key-board"><span class="en">Leaderboard score</span><span class="zh" lang="zh-CN">榜单分</span></span>
+          <span class="key key-feel"><span class="en">How it feels in your repo</span><span class="zh" lang="zh-CN">在你仓库里的体感</span></span>
+        </div>
+        <svg class="drift-svg" viewBox="0 0 560 380" role="img" aria-labelledby="drift-desc">
+          <desc id="drift-desc">Illustration: across five model versions the leaderboard score rises while the feel in your repository drops, and a small agent drawing gets more abstract with each version.</desc>
+          <defs>
+            <filter id="wob1" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="2.5"/></filter>
+            <filter id="wob2" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="6"/></filter>
+            <filter id="wob3" x="-30%" y="-30%" width="160%" height="160%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="11"/></filter>
+            <filter id="wob4" x="-40%" y="-40%" width="180%" height="180%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="3" seed="19"/><feDisplacementMap in="SourceGraphic" scale="19"/></filter>
+            <filter id="wob4b" x="-40%" y="-40%" width="180%" height="180%"><feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" seed="42"/><feDisplacementMap in="SourceGraphic" scale="24"/></filter>
+            <symbol id="bot" viewBox="0 0 80 80" overflow="visible">
+              <rect x="14" y="24" width="52" height="40" rx="10"/>
+              <path d="M40 24V13"/><circle cx="40" cy="10" r="3.2"/>
+              <circle cx="30" cy="42" r="4.2"/><circle cx="50" cy="42" r="4.2"/>
+              <path d="M30 54h20"/><path d="M14 44H8M66 44h6"/>
+            </symbol>
+          </defs>
+          <!-- grid -->
+          <g class="d-grid">
+            <path d="M24 40H536M24 100H536M24 160H536"/>
+            <path class="d-base" d="M24 220H536"/>
+          </g>
+          <!-- leaderboard: rising -->
+          <polyline class="d-board" points="64,196 172,166 280,132 388,98 496,56"/>
+          <g class="d-board-dots"><circle cx="64" cy="196" r="5"/><circle cx="172" cy="166" r="5"/><circle cx="280" cy="132" r="5"/><circle cx="388" cy="98" r="5"/><circle cx="496" cy="56" r="5"/></g>
+          <!-- feel: drifting down -->
+          <polyline class="d-feel" points="64,112 172,106 280,128 388,158 496,188"/>
+          <g class="d-feel-dots"><circle cx="64" cy="112" r="5"/><circle cx="172" cy="106" r="5"/><circle cx="280" cy="128" r="5"/><circle cx="388" cy="158" r="5"/></g>
+          <text class="d-q" x="496" y="197" text-anchor="middle">?</text>
+          <!-- agents, each version a little more abstract -->
+          <g class="d-bots">
+            <use href="#bot" x="24" y="232" width="80" height="80"/>
+            <use href="#bot" x="132" y="232" width="80" height="80" filter="url(#wob1)"/>
+            <use href="#bot" x="240" y="232" width="80" height="80" filter="url(#wob2)"/>
+            <use href="#bot" x="348" y="232" width="80" height="80" filter="url(#wob3)"/>
+            <use href="#bot" x="456" y="232" width="80" height="80" filter="url(#wob4)"/>
+            <use class="d-scribble" href="#bot" x="451" y="227" width="90" height="90" filter="url(#wob4b)"/>
+          </g>
+          <g class="d-ver" text-anchor="middle">
+            <text x="64" y="360">v1</text><text x="172" y="360">v2</text><text x="280" y="360">v3</text><text x="388" y="360">v4</text><text x="496" y="360">v5</text>
+          </g>
+        </svg>
+        <figcaption>
+          <span class="en">Illustration, not measured data.</span>
+          <span class="zh" lang="zh-CN">示意图，不是实测数据。</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="qa">
+      <h3 class="qa-title"><span class="en">Each question, answered on your own cases</span><span class="zh" lang="zh-CN">每个问题，都用你自己的题来回答</span></h3>
+      <dl class="qa-list">
+        <div class="qa-row">
+          <dt><span class="en">Switch or stay?</span><span class="zh" lang="zh-CN">换不换？</span></dt>
+          <dd><span class="en">Run the new model and your current one on the same cases, the same snapshots and the same judges.</span><span class="zh" lang="zh-CN">新模型和现在用的模型，跑同一批题、同一个快照、同一对 judge。</span></dd>
+        </div>
+        <div class="qa-row">
+          <dt><span class="en">Which thinking effort?</span><span class="zh" lang="zh-CN">effort 开多少？</span></dt>
+          <dd><span class="en">Every effort level is its own row in the matrix, with its score and its cost per run.</span><span class="zh" lang="zh-CN">每一档 effort 在矩阵里单独一行，得分和每次花费并排摆着。</span></dd>
+        </div>
+        <div class="qa-row">
+          <dt><span class="en">How should you use it?</span><span class="zh" lang="zh-CN">怎么用？</span></dt>
+          <dd><span class="en">Compare solo, reviewed and forced-adoption runs, or lay a new AGENTS.md over the old snapshots and rerun the same cases.</span><span class="zh" lang="zh-CN">比较单独写、评审后改稿、强制采纳评审三种方式；也可以把新的 AGENTS.md 叠到旧快照上，同一批题重跑。</span></dd>
+        </div>
+        <div class="qa-row">
+          <dt><span class="en">Better than what you had?</span><span class="zh" lang="zh-CN">比原来的强吗？</span></dt>
+          <dd><span class="en">Keep the cases as a baseline and rerun them when the next model ships.</span><span class="zh" lang="zh-CN">题目留作基线，下个模型发布时再跑一遍。</span></dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- The three skills -->
+<section class="section skills" id="skills" aria-labelledby="skills-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="skills-title">
+        <span class="en">Two learn from your own history. One keeps the work on one line.</span>
+        <span class="zh" lang="zh-CN">两个从你的记录里学，一个帮你守住主线</span>
+      </h2>
+      <p class="en">Your session logs already say where your agents go wrong: every correction you typed, every recommended option you turned down. <span class="nb">agent-eval</span> and <span class="nb">questionnaire-review</span> read that record on your own computer. <span class="nb">i-have-ocd</span> reads no logs; it keeps you and your agents on one main line while the work happens.</p>
+      <p class="zh" lang="zh-CN">agent 在哪儿出错，你的会话日志里早就记着：你打过的每一句纠正，你没选的每一个推荐选项。<span class="nb">agent-eval</span> 和 <span class="nb">questionnaire-review</span> 在你自己的电脑上读这份记录。<span class="nb">i-have-ocd</span> 不读日志，它在干活的时候让你和 agent 只沿一条主线走。</p>
+    </div>
+
+    <!-- agent-eval -->
+    <article class="skill skill-eval" style="--accent: var(--amber); --accent-fill: var(--amber-fill)" aria-labelledby="eval-title">
+      <div class="skill-intro">
+        <span class="skill-tag"><span class="dot" aria-hidden="true"></span>agent-eval</span>
+        <h3 id="eval-title">
+          <span class="en">Test models and effort on the mistakes your agents actually made</span>
+          <span class="zh" lang="zh-CN">在你的 agent 真犯过的错上，测模型和 effort</span>
+        </h3>
+        <p class="en">Every case is a real moment when you corrected an agent. A candidate model gets the same instruction, the same facts and the repository as it was then, and is scored on whether it avoids the mistake. Use it to pick a model and effort for a role, to check whether a review step or a new AGENTS.md helps, and as a regression baseline when a new model ships.</p>
+        <p class="zh" lang="zh-CN">每道题都是你纠正 agent 的一个真实时刻。候选模型拿到同样的指令、同样的背景事实，以及当时那一版仓库，按它能不能避开那次的错来打分。可以用来给某个角色选模型和 effort，检验加评审或改 AGENTS.md 有没有用，也可以在新模型发布时当回归基线。</p>
+        <div class="get">
+          <h4><span class="en">What you get</span><span class="zh" lang="zh-CN">你会得到</span></h4>
+          <p class="en">Score and cost for every model, effort and delivery mode on your own cases, and a baseline to rerun when the next model ships.</p>
+          <p class="zh" lang="zh-CN">你自己题目上每个模型、每档 effort、每种交付方式的得分和花费，外加一套基线，下个模型出来时直接重跑。</p>
+        </div>
+      </div>
+      <div class="skill-steps">
+        <h4><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></h4>
+        <ol class="steps">
+          <li>
+            <p class="en"><strong>Mine corrections.</strong> Every message you typed after an agent turn comes out of your Claude Code and Codex logs. A small model (Claude Haiku by default) labels which ones are corrections; no keyword list decides. You pick 3–5 of different kinds.</p>
+            <p class="zh" lang="zh-CN"><strong>挖出纠正。</strong>从 Claude Code 和 Codex 日志里取出你在 agent 回复之后打的每一句话，由小模型（默认 Claude Haiku）判断哪些是纠正，不靠关键词表。你从中挑 3–5 道不同类型的。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Write and review each case.</strong> Your verbatim messages, the facts the agent knew, the exact commit recovered from the reflog, and a two-level Trap: the right direction, and done right. You mark every item on a review page.</p>
+            <p class="zh" lang="zh-CN"><strong>写题、审题。</strong>你的原话、agent 当时掌握的事实、从 reflog 找回的确切提交，外加两级判定：方向对，和做到位。你在审阅页上逐条确认。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Isolate and calibrate.</strong> Each run gets a one-commit snapshot with no later history, no credentials and no memory files. Codex runs and every run that edits code go inside macOS <code>sandbox-exec</code>; a Claude planning run gets read-only tools. Before any model is scored, both judges, from different vendors, must fail the original wrong answer and pass the one you accepted.</p>
+            <p class="zh" lang="zh-CN"><strong>隔离、校准。</strong>每次运行只拿到一个提交的快照：没有之后的历史、没有凭据、没有记忆文件。Codex 的运行和所有要改代码的运行都放进 macOS 的 <code>sandbox-exec</code>；Claude 做计划题时只给只读工具。给模型打分之前，两个不同厂商的 judge 必须先判原来的错答案不过、你认可的答案过。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Run the matrix.</strong> Models × thinking effort × delivery mode: solo, with a reviewer, or forced adoption of the review. Implementation cases are scored by the real fix’s own tests.</p>
+            <p class="zh" lang="zh-CN"><strong>跑矩阵。</strong>模型 × effort × 交付方式：单独写、评审后改稿、强制采纳评审。实现题用真实修复自带的测试计分。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Report with cost.</strong> A pass needs both judges. Each run’s list-price cost covers the whole chain, reviewer and subagents included.</p>
+            <p class="zh" lang="zh-CN"><strong>带成本出报告。</strong>两个 judge 都判过才算通过。每次运行按标价计全链成本，评审和子 agent 都算在内。</p>
+          </li>
+        </ol>
+      </div>
+    </article>
+
+    <div class="skill-pair">
+      <!-- questionnaire-review -->
+      <article class="skill skill-qr" style="--accent: var(--cyan); --accent-fill: var(--cyan-fill)" aria-labelledby="qr-title">
+        <span class="skill-tag"><span class="dot" aria-hidden="true"></span>questionnaire-review</span>
+        <h3 id="qr-title">
+          <span class="en">Turn the options you overrode into rules your agents follow</span>
+          <span class="zh" lang="zh-CN">把你没按推荐选的地方，变成 agent 要守的规则</span>
+        </h3>
+        <p class="en">Claude Code agents ask you to decide through multiple-choice questions, with one option marked recommended. Each time you pick something else, the agent’s default judgment and yours differed. Those differences cluster by what the recommendation does and by theme.</p>
+        <p class="zh" lang="zh-CN">Claude Code 的 agent 用选择题请你拍板，其中一个选项标着推荐。你每选一次别的，就说明它的默认判断和你的不一样。这些分歧不是随机的，会按推荐的类型和主题扎堆出现。</p>
+
+        <div class="mock mock-q" aria-label="Example questionnaire" data-i18n-aria="mock-q" role="group">
+          <p class="mock-label"><span class="en">Example</span><span class="zh" lang="zh-CN">示例</span></p>
+          <p class="mq-question"><span class="bullet" aria-hidden="true">●</span><span class="en">The nightly check fails about once a week. How should we handle it?</span><span class="zh" lang="zh-CN">夜间校验大约每周挂一次，怎么处理？</span></p>
+          <ol class="mq-options">
+            <li class="mq-rec"><span class="en">Open a ticket and fix it later</span><span class="zh" lang="zh-CN">开个票，以后再修</span> <span class="pill pill-rec"><span class="en">Recommended</span><span class="zh" lang="zh-CN">推荐</span></span></li>
+            <li class="mq-pick"><span class="en">Fix the cause in this change</span><span class="zh" lang="zh-CN">在这次改动里把原因修掉</span> <span class="pill pill-pick"><span class="en">You chose</span><span class="zh" lang="zh-CN">你选的</span></span></li>
+          </ol>
+          <p class="mq-rule">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m0 0-4-4m4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="en"><strong>Rule added:</strong> when you recommend deferring, say why. If you can’t, recommend the other option.</span>
+            <span class="zh" lang="zh-CN"><strong>新规则：</strong>推荐推迟时写出理由；写不出来，就推荐另一边。</span>
+          </p>
+        </div>
+
+        <h4><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></h4>
+        <ol class="steps">
+          <li>
+            <p class="en"><strong>Extract</strong> every questionnaire and your answer from <code>~/.claude/projects</code>: the options, which one was recommended, what you chose or wrote instead.</p>
+            <p class="zh" lang="zh-CN"><strong>提取。</strong>从 <code>~/.claude/projects</code> 取出每份问卷和你的回答：有哪些选项、推荐的是哪个、你选了什么或自己写了什么。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Label.</strong> A small model labels what each recommendation does: act now, defer, keep the old path, hand you a manual step, file a ticket. The counting stays in the script.</p>
+            <p class="zh" lang="zh-CN"><strong>打标签。</strong>小模型标出每个推荐在做什么：现在就做、推迟、保持现状、让你动手、另开票。计数交给脚本。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Read and audit.</strong> The agent reads every override, groups them into themes, and checks each theme against your project’s rules.</p>
+            <p class="zh" lang="zh-CN"><strong>通读、对照。</strong>agent 逐条读你的改选，归成主题，再对照项目规则，看每个主题写了没有。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Decide.</strong> One question per candidate rule. Accepted rules go into your project’s rules in one PR; declined ones are skipped next round.</p>
+            <p class="zh" lang="zh-CN"><strong>拍板。</strong>每条候选规则问你一次。接受的在一个 PR 里写进项目规则，拒绝的下一轮不再提。</p>
+          </li>
+          <li>
+            <p class="en"><strong>Enforce.</strong> A PreToolUse hook hands the agent your checklist before each questionnaire, and it rewrites the question against it.</p>
+            <p class="zh" lang="zh-CN"><strong>落地。</strong>PreToolUse 钩子在每次出题前把清单交回给 agent，它先按清单改好题目再来问你。</p>
+          </li>
+        </ol>
+
+        <figure class="mini-chart" aria-labelledby="qr-data-cap">
+          <figcaption id="qr-data-cap">
+            <span class="en">How often the recommended option was taken</span>
+            <span class="zh" lang="zh-CN">推荐选项被采纳的比例</span>
+          </figcaption>
+          <ul class="hbars">
+            <li style="--v:36.7"><span class="hb-label"><span class="en">Recommended “defer”</span><span class="zh" lang="zh-CN">推荐「以后再做」</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">36.7%</span></li>
+            <li style="--v:75.6"><span class="hb-label"><span class="en">Recommended “act now”</span><span class="zh" lang="zh-CN">推荐「现在就做」</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">75.6%</span></li>
+          </ul>
+          <p class="note en">The author’s own logs, one two-week round: 1,813 questions, 1,635 of them single-choice with a recommendation and an answer. 120 recommended deferring and 455 recommended acting now. The round wrote 6 rules and 1 hook into the project.</p>
+          <p class="note zh" lang="zh-CN">作者自己的日志，一轮两周：共 1,813 道题，其中 1,635 道是带推荐、有作答的单选题；推荐推迟的 120 道，推荐现在就做的 455 道。这一轮往项目里写进了 6 条规则和 1 个钩子。</p>
+        </figure>
+
+        <div class="get">
+          <h4><span class="en">What you get</span><span class="zh" lang="zh-CN">你会得到</span></h4>
+          <p class="en">Your acceptance rate by kind of recommendation, themes with dated examples, and the rules you accepted. You start a round every two weeks; the first one also adds the checklist and the hook.</p>
+          <p class="zh" lang="zh-CN">按推荐类型拆开的采纳率、带日期例子的主题，以及你接受的规则。每两周由你发起一轮，第一轮还会加上清单和钩子。</p>
+        </div>
+      </article>
+
+      <!-- i-have-ocd -->
+      <article class="skill skill-ocd" style="--accent: var(--pink); --accent-fill: var(--pink)" aria-labelledby="ocd-title">
+        <span class="skill-tag"><span class="dot" aria-hidden="true"></span>i-have-ocd</span>
+        <h3 id="ocd-title">
+          <span class="en">Keep one main line and park every other finding</span>
+          <span class="zh" lang="zh-CN">只走一条主线，别的发现先记下来</span>
+        </h3>
+        <p class="en">Some people can’t leave a small defect alone. Agents feed that urge by reporting every finding and asking about it right away. Each detour looks cheap; together they scatter your attention, and work that belongs together gets done piecemeal. <span class="nb">i-have-ocd</span> keeps one main line: a title, a done-when criterion and the next step.</p>
+        <p class="zh" lang="zh-CN">有的人看见小毛病就想立刻修掉，agent 偏偏每个发现都汇报、都当场问。每次岔出去看着都不贵，加起来注意力就散了，本该一起规划的活被拆得零零碎碎。<span class="nb">i-have-ocd</span> 只留一条主线：标题、完成标准、下一步。</p>
+
+        <div class="mock mock-ocd" role="group" aria-label="Example store and reply ending" data-i18n-aria="mock-ocd">
+          <p class="mock-label"><span class="en">Example · the store</span><span class="zh" lang="zh-CN">示例 · 记录文件</span></p>
+          <dl class="ocd-lines">
+            <div class="ocd-main"><dt><span class="en">Main line</span><span class="zh" lang="zh-CN">主线</span></dt><dd><span class="en">Ship the eval report · done when: report archived</span><span class="zh" lang="zh-CN">发布评测报告 · 完成标准：报告已归档</span></dd></div>
+            <div><dt><span class="en">Parked</span><span class="zh" lang="zh-CN">停放</span></dt><dd><span class="en">Date test fails near DST: false CI alarms</span><span class="zh" lang="zh-CN">夏令时前后日期测试会挂：CI 误报</span> <span class="where">tests/test_dates.py:88</span></dd></div>
+            <div><dt><span class="en">Parked</span><span class="zh" lang="zh-CN">停放</span></dt><dd><span class="en">Docs still show the old export command: copying it fails</span><span class="zh" lang="zh-CN">文档里还是旧的导出命令：照抄会报错</span> <span class="where">docs/cli.md</span></dd></div>
+          </dl>
+          <p class="mock-label mock-sub"><span class="en">How the reply ends</span><span class="zh" lang="zh-CN">回复的结尾</span></p>
+          <p class="ocd-next"><span class="en">Next: rerun both judges on case 3</span><span class="zh" lang="zh-CN">下一步：在第 3 题上重跑两个 judge</span> <span class="side">side +2</span></p>
+        </div>
+
+        <h4><span class="en">How it works</span><span class="zh" lang="zh-CN">怎么做</span></h4>
+        <ol class="steps">
+          <li>
+            <p class="en">Every new item is sorted as <strong>main line</strong>, <strong>urgent</strong> or <strong>parked</strong>.</p>
+            <p class="zh" lang="zh-CN">每个新冒出来的事，先分成<strong>主线</strong>、<strong>紧急</strong>、<strong>停放</strong>三类。</p>
+          </li>
+          <li>
+            <p class="en">Urgent means money or position risk, a production incident, a leaked credential, or an identity check.</p>
+            <p class="zh" lang="zh-CN">紧急只有这几种：资金或持仓风险、线上事故、凭据泄露、需要你本人做的身份验证。</p>
+          </li>
+          <li>
+            <p class="en">A parked item is one line: what it is, why it matters, where it was seen. It is not fixed or asked about on the spot.</p>
+            <p class="zh" lang="zh-CN">停放就是记一行：是什么、为什么要紧、在哪儿看到的。不当场修，也不当场问。</p>
+          </li>
+          <li>
+            <p class="en">Each reply ends with one next step and a <code class="nb">side +N</code> count.</p>
+            <p class="zh" lang="zh-CN">每条回复都以一个下一步和 <code class="nb">side +N</code> 计数收尾。</p>
+          </li>
+          <li>
+            <p class="en">When you ask for a review, parked items are grouped and planned in batches, with the decisions as one set of questions.</p>
+            <p class="zh" lang="zh-CN">你要看支线时，停放的条目按领域分组、成批规划，要你决定的事一次问完。</p>
+          </li>
+        </ol>
+
+        <div class="get">
+          <h4><span class="en">What you get</span><span class="zh" lang="zh-CN">你会得到</span></h4>
+          <p class="en">Fewer detours, and the side work planned together instead of piecemeal. It reads no logs and sends nothing.</p>
+          <p class="zh" lang="zh-CN">少走岔路；支线的活攒到一起规划，不再零敲碎打。它不读日志，也不发送任何数据。</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Results -->
+<section class="section results" id="results" aria-labelledby="results-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="results-title">
+        <span class="en">What agent-eval found on our own problems</span>
+        <span class="zh" lang="zh-CN">agent-eval 在我们自己的问题上测出了什么</span>
+      </h2>
+      <p class="en">All from the author’s own repository. <strong>Planning:</strong> 3 real correction cases, 6 models, effort from medium to each model’s highest, 156 planning runs; a pass needs both judges. <strong>Implementation:</strong> 20 runs, stopped early, plus 12 smoke runs. The sample is small: read it as an example of what the report shows, not as a ranking of models.</p>
+      <p class="zh" lang="zh-CN">数据全部来自作者自己的仓库。<strong>计划题：</strong>3 道来自真实纠正的题，6 个模型，effort 从 medium 到各模型的最高档，共 156 次运行，两个 judge 都判过才算通过。<strong>实现题：</strong>跑到 20 次就提前叫停，另有 12 次冒烟测试。样本很小，请把它看作报告长什么样的一个例子，不要当成模型排名。</p>
+      <p class="models"><span class="en">Models:</span><span class="zh" lang="zh-CN">模型：</span> <code>claude-fable-5-1</code> <code>claude-opus-5-5</code> <code>gpt-6-astra</code> <code>gpt-6-sol</code> <code>gpt-6-luna</code> <code>deepseek-flash</code></p>
+    </div>
+
+    <!-- Finding 1: effort -->
+    <article class="finding finding-lead" aria-labelledby="f1-title">
+      <h3 id="f1-title">
+        <span class="en">More effort barely moved the score. The cost rose 2.7×.</span>
+        <span class="zh" lang="zh-CN">effort 越开越高，分数几乎没动，花费涨到 2.7 倍</span>
+      </h3>
+      <div class="f1-charts">
+        <figure class="vchart" data-animate aria-labelledby="f1a-cap">
+          <figcaption id="f1a-cap"><span class="en">Rubric score by thinking effort</span><span class="zh" lang="zh-CN">各档 effort 的细则得分</span></figcaption>
+          <div class="vplot" style="--max:50">
+            <div class="vaxis" aria-hidden="true"><span>50%</span><span>25%</span><span>0</span></div>
+            <ul class="vbars">
+              <li style="--v:39"><span class="vb-val">39%</span><span class="vb-bar"></span><span class="vb-lab">medium</span></li>
+              <li style="--v:41"><span class="vb-val">41%</span><span class="vb-bar"></span><span class="vb-lab">high</span></li>
+              <li style="--v:42"><span class="vb-val">42%</span><span class="vb-bar"></span><span class="vb-lab">xhigh</span></li>
+              <li style="--v:43"><span class="vb-val">43%</span><span class="vb-bar"></span><span class="vb-lab">max</span></li>
+              <li style="--v:38"><span class="vb-val">38%</span><span class="vb-bar"></span><span class="vb-lab">ultra</span></li>
+            </ul>
+          </div>
+        </figure>
+        <figure class="vchart vchart-cost" data-animate aria-labelledby="f1b-cap">
+          <figcaption id="f1b-cap"><span class="en">Cost per run</span><span class="zh" lang="zh-CN">每次运行的花费</span></figcaption>
+          <div class="vplot" style="--max:8">
+            <div class="vaxis" aria-hidden="true"><span>$8</span><span>$4</span><span>0</span></div>
+            <ul class="vbars">
+              <li style="--v:1.63"><span class="vb-val">$1.63</span><span class="vb-bar"></span><span class="vb-lab">medium</span></li>
+              <li style="--v:4.38"><span class="vb-val">$4.38</span><span class="vb-bar"></span><span class="vb-lab">max</span></li>
+            </ul>
+          </div>
+        </figure>
+      </div>
+      <p class="note en">Rubric score: for each run, the share of the case’s yes/no rubric items that both judges marked as met, averaged over the runs at that effort. Every level landed between 38% and 43%. All 6 models ran medium to max; only <code>gpt-6-astra</code> and <code>gpt-6-sol</code> ran at ultra, so that bar averages those two.</p>
+      <p class="note zh" lang="zh-CN">细则得分：每次运行中，两个 judge 都判为满足的是非细则占该题细则的比例，再对同一档 effort 的所有运行取平均。各档都在 38% 到 43% 之间。6 个模型都跑了 medium 到 max；只有 <code>gpt-6-astra</code> 和 <code>gpt-6-sol</code> 跑了 ultra，所以 ultra 那一栏只是这两个模型的平均。</p>
+    </article>
+
+    <div class="finding-pair">
+      <!-- Finding 2: reviewer -->
+      <article class="finding" aria-labelledby="f2-title">
+        <h3 id="f2-title">
+          <span class="en">A reviewer tripled the cost and didn’t raise the score</span>
+          <span class="zh" lang="zh-CN">加一轮评审，成本三倍，分数没涨</span>
+        </h3>
+        <figure class="hchart" data-animate>
+          <figcaption class="sr-only"><span class="en">Score and cost per run, without and with a review round</span><span class="zh" lang="zh-CN">没有评审与加一轮评审的得分和每次花费</span></figcaption>
+          <p class="hc-title"><span class="en">Rubric score</span><span class="zh" lang="zh-CN">细则得分</span></p>
+          <ul class="hbars" style="--max:50">
+            <li style="--v:42"><span class="hb-label"><span class="en">First draft</span><span class="zh" lang="zh-CN">初稿</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">42%</span></li>
+            <li style="--v:40"><span class="hb-label"><span class="en">After review</span><span class="zh" lang="zh-CN">评审后改稿</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">40%</span></li>
+          </ul>
+          <p class="hc-title"><span class="en">Cost per run</span><span class="zh" lang="zh-CN">每次花费</span></p>
+          <ul class="hbars hbars-cost" style="--max:8">
+            <li style="--v:1.49"><span class="hb-label"><span class="en">Solo</span><span class="zh" lang="zh-CN">单独写</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">$1.49</span></li>
+            <li style="--v:4.37"><span class="hb-label"><span class="en">With review</span><span class="zh" lang="zh-CN">加评审</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">$4.37</span></li>
+          </ul>
+        </figure>
+        <p class="note en">On one case the reviewer pointed to the right direction in 24 of 26 runs, and after revising none passed. What failed was the writing model acting on the advice, not the review itself.</p>
+        <p class="note zh" lang="zh-CN">有一道题，评审员 26 次里有 24 次指出了正确方向，改稿之后仍然一次都没过。卡住的是写稿的模型没有照着改，不是评审本身没用。</p>
+      </article>
+
+      <!-- Finding 3: cheap vs expensive -->
+      <article class="finding" aria-labelledby="f3-title">
+        <h3 id="f3-title">
+          <span class="en">A cheap model tied an expensive one</span>
+          <span class="zh" lang="zh-CN">便宜模型和贵模型打平</span>
+        </h3>
+        <figure class="hchart" data-animate>
+          <figcaption class="sr-only"><span class="en">Score and cost per run for two models</span><span class="zh" lang="zh-CN">两个模型的得分和每次花费</span></figcaption>
+          <p class="hc-title"><span class="en">Rubric score</span><span class="zh" lang="zh-CN">细则得分</span></p>
+          <ul class="hbars" style="--max:50">
+            <li style="--v:42"><span class="hb-label"><code>deepseek-flash</code></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">42%</span></li>
+            <li style="--v:42"><span class="hb-label"><code>claude-fable-5-1</code></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">42%</span></li>
+          </ul>
+          <p class="hc-title"><span class="en">Cost per run, about</span><span class="zh" lang="zh-CN">每次花费，约</span></p>
+          <ul class="hbars hbars-cost" style="--max:8">
+            <li style="--v:1.1"><span class="hb-label"><code>deepseek-flash</code></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">$1.1</span></li>
+            <li style="--v:6.8"><span class="hb-label"><code>claude-fable-5-1</code></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">$6.8</span></li>
+          </ul>
+        </figure>
+        <p class="note en">Each cost is the average over all of that model’s runs, solo and reviewed, review round included.</p>
+        <p class="note zh" lang="zh-CN">花费是该模型全部运行（单独写和加评审）的平均，评审那一轮也算在内。</p>
+      </article>
+    </div>
+
+    <!-- Finding 4: plan -->
+    <article class="finding finding-plan" aria-labelledby="f4-title">
+      <h3 id="f4-title">
+        <span class="en">The plan mattered more than the model or the effort</span>
+        <span class="zh" lang="zh-CN">计划比模型、比 effort 都要紧</span>
+      </h3>
+      <p class="en">Implementation runs on one case with 42 hidden tests, placed only after the candidate stops; the unchanged snapshot passes 3. Hidden tests passed:</p>
+      <p class="zh" lang="zh-CN">实现题里有一道带 42 个隐藏测试，候选模型停手之后才放进去；快照原样能过 3 个。通过的隐藏测试数：</p>
+      <figure class="hchart plan-chart" data-animate>
+        <figcaption class="sr-only"><span class="en">Hidden tests passed out of 42, by implementer and plan</span><span class="zh" lang="zh-CN">按实现者和计划，42 个隐藏测试中通过的数量</span></figcaption>
+        <div class="plan-legend" aria-hidden="true">
+          <span class="key key-own"><span class="en">On its own</span><span class="zh" lang="zh-CN">直接做</span></span>
+          <span class="key key-plan"><span class="en">Given another model’s plan</span><span class="zh" lang="zh-CN">拿别的模型的计划</span></span>
+        </div>
+        <p class="hc-title"><span class="en">Same implementer, different plan (averages)</span><span class="zh" lang="zh-CN">同一个实现者，换计划（平均值）</span></p>
+        <ul class="hbars" style="--max:42">
+          <li class="own" style="--v:26.7"><span class="hb-label"><code>gpt-6-sol</code> <span class="en">on its own</span><span class="zh" lang="zh-CN">直接做</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">26.7</span></li>
+          <li style="--v:32.5"><span class="hb-label"><code>gpt-6-sol</code> + <span class="en">Fable’s plan</span><span class="zh" lang="zh-CN">Fable 的计划</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">32.5</span></li>
+          <li style="--v:25.5"><span class="hb-label"><code>gpt-6-sol</code> + <span class="en">astra’s plan</span><span class="zh" lang="zh-CN">astra 的计划</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">25.5</span></li>
+        </ul>
+        <p class="hc-title"><span class="en">The priciest setting tested vs. a cheap model with a good plan <span class="nb">(smoke runs)</span></span><span class="zh" lang="zh-CN">测试里最贵的一档，对比便宜模型加好计划<span class="nb">（冒烟测试）</span></span></p>
+        <ul class="hbars" style="--max:42">
+          <li class="own" style="--v:25"><span class="hb-label"><code>gpt-6-astra</code> max</span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">25 <small>· $9.9</small></span></li>
+          <li class="own" style="--v:26"><span class="hb-label"><code>claude-opus-5-5</code> max</span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">26 <small>· $10.8 · <span class="en">50 min</span><span class="zh" lang="zh-CN">50 分钟</span></small></span></li>
+          <li style="--v:38"><span class="hb-label"><code>gpt-6-luna</code> + <span class="en">Fable’s plan</span><span class="zh" lang="zh-CN">Fable 的计划</span></span><span class="hb-track"><span class="hb-bar"></span></span><span class="hb-val">38 <small>· <span class="en">about $0.06 to implement</span><span class="zh" lang="zh-CN">实现约 $0.06</span></small></span></li>
+        </ul>
+        <div class="hticks" aria-hidden="true"><span>0</span><span>21</span><span>42</span></div>
+      </figure>
+      <p class="note en">Each planner wrote one plan per round, so this compares two plans, not two planners. On the second case (285 hidden tests; the snapshot passes 122), given the plan the author had approved, <code>gpt-6-sol</code> and <code>gpt-6-astra</code> both passed 267–270, at $2–6 and $10–17 per run.</p>
+      <p class="note zh" lang="zh-CN">每个计划模型每轮只写一份计划，所以这里比的是两份计划，不能说明哪个模型更会写计划。另一道题有 285 个隐藏测试（快照原样过 122 个），给定作者批准过的计划后，<code>gpt-6-sol</code> 和 <code>gpt-6-astra</code> 都过了 267–270 个，每次花费分别是 $2–6 和 $10–17。</p>
+    </article>
+
+    <!-- Finding 5: the lever -->
+    <article class="finding finding-lever" aria-labelledby="f5-title">
+      <h3 id="f5-title">
+        <span class="en">No run did it the author’s way: 0 of 156</span>
+        <span class="zh" lang="zh-CN">156 次运行，没有一次做到作者本人的做法</span>
+      </h3>
+      <div class="lever-body">
+        <p class="en">All three cases turned on the author’s own engineering preferences, and none of them was written down in the repository or its rules. The report’s reading: the lever is writing those preferences into AGENTS.md, not more effort or another reviewer. <a class="nb" href="#qr-title">questionnaire-review</a> does that writing, from the options you override.</p>
+        <p class="zh" lang="zh-CN">三道题考的都是作者个人的工程偏好，而这些偏好在仓库和规范里一个字都没写。报告的判断是：杠杆在于把偏好写进 AGENTS.md，而不是加 effort、加评审。<a class="nb" href="#qr-title">questionnaire-review</a> 做的就是这件事：从你改选的地方把偏好写成规则。</p>
+        <p class="en">After the preferences were written in, a rerun of the best setup got the direction right on 2 of the 3 cases and still reached “done right” 0 of 6 times. That rerun is in-sample: 2 runs per case, on the same cases the rules came from.</p>
+        <p class="zh" lang="zh-CN">把偏好写进规范后重跑最好的组合：方向上 3 道题对了 2 道，「做到位」仍是 0/6。这是样本内测试：每题只跑 2 次，规则也正是从这几道题总结出来的。</p>
+      </div>
+      <p class="note en">The mining step was checked too: on 4 sessions with known corrections (1,747 messages) it found all 5 correction moments, at about $0.004 per message.</p>
+      <p class="note zh" lang="zh-CN">找题这一步也核对过：在 4 个已知有纠正的会话（1,747 条消息）上，它找回了全部 5 个纠正时刻，每条消息约 $0.004。</p>
+    </article>
+  </div>
+</section>
+
+<!-- Install -->
+<section class="section install" id="install" aria-labelledby="install-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="install-title"><span class="en">Install</span><span class="zh" lang="zh-CN">安装</span></h2>
+      <p class="en">One plugin, all three skills. Two commands in Claude Code, one for Codex and other agents.</p>
+      <p class="zh" lang="zh-CN">一个插件，三个 skill 全在里面。Claude Code 里两条命令，Codex 和其他 agent 一条。</p>
+    </div>
+    <div class="install-grid">
+      <div class="cmd-block">
+        <div class="cmd-head">
+          <h3>Claude Code</h3>
+          <button type="button" class="copy" data-copy="/plugin marketplace add luoy2/skills&#10;/plugin install luoy2-skills@luoy2">
+            <svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            <svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span>
+            <span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span>
+          </button>
+        </div>
+        <pre class="cmd cmd-cc"><code><span class="line">/plugin marketplace add luoy2/skills</span>
+<span class="line">/plugin install luoy2-skills@luoy2</span></code></pre>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-head">
+          <h3><span class="en">Codex and other agents</span><span class="zh" lang="zh-CN">Codex 及其他 agent</span></h3>
+          <button type="button" class="copy" data-copy="npx skills@1.7.0 add luoy2/skills">
+            <svg class="i-copy" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            <svg class="i-check" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="copy-label"><span class="en">Copy</span><span class="zh" lang="zh-CN">复制</span></span>
+            <span class="copied-label"><span class="en">Copied</span><span class="zh" lang="zh-CN">已复制</span></span>
+          </button>
+        </div>
+        <pre class="cmd cmd-sh"><code><span class="line">npx skills@1.7.0 add luoy2/skills</span></code></pre>
+      </div>
+    </div>
+    <p class="after-note en">Then ask in plain words, for example “use <span class="nb">agent-eval</span> to test the new model on our repo”. The skill walks you through scoping, writing cases and the run.</p>
+    <p class="after-note zh" lang="zh-CN">装好后直接用自然语言说就行，比如「用 <span class="nb">agent-eval</span> 在我们仓库上测一下新模型」。skill 会带你走完圈定范围、写题和运行。</p>
+    <p class="where-note en"><span class="nb">agent-eval</span> and <span class="nb">questionnaire-review</span> run where your logs are: Claude Code or Codex on your own computer. In claude.ai chat or Cowork the skills load, but they can reach neither your logs nor the command-line tools.</p>
+    <p class="where-note zh" lang="zh-CN"><span class="nb">agent-eval</span> 和 <span class="nb">questionnaire-review</span> 要在日志所在的地方运行：你自己电脑上的 Claude Code 或 Codex。在 claude.ai 网页聊天或 Cowork 里，skill 能加载，但既读不到本机日志，也调不了命令行工具。</p>
+    <p class="sr-only" aria-live="polite" id="copy-status"></p>
+  </div>
+</section>
+
+<!-- Privacy -->
+<section class="section privacy" id="privacy" aria-labelledby="privacy-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="privacy-title">
+        <span class="en">Your logs stay on your computer</span>
+        <span class="zh" lang="zh-CN">日志留在你自己的电脑上</span>
+      </h2>
+      <p class="en"><strong>No server, no account, no telemetry, and nothing is sent to the author.</strong> A step that calls an AI model puts only what is listed below into the prompt, and sends it to the provider you chose for that step through your own <code>claude</code> or <code>codex</code> login, like any prompt you type, or through your own model gateway if you set one.</p>
+      <p class="zh" lang="zh-CN"><strong>没有服务器、没有账号、没有遥测，也不向作者发送任何数据。</strong>需要调用模型的步骤，只把下面列出的内容放进提示词，用你自己的 <code>claude</code> 或 <code>codex</code> 登录发给你为这一步选的服务商，和你平时输入提示词一样；如果你设了自己的模型网关，就经过网关。</p>
+    </div>
+
+    <div class="flow" role="table" aria-labelledby="privacy-title">
+      <div class="flow-head" role="row">
+        <span role="columnheader"><span class="en">Step</span><span class="zh" lang="zh-CN">步骤</span></span>
+        <span role="columnheader"><span class="en">What it sends</span><span class="zh" lang="zh-CN">发送的内容</span></span>
+        <span role="columnheader"><span class="en">To whom</span><span class="zh" lang="zh-CN">发给谁</span></span>
+      </div>
+
+      <div class="flow-group" role="rowgroup" style="--accent: var(--cyan)">
+        <div class="flow-skill" role="row"><span role="cell" class="skill-tag"><span class="dot" aria-hidden="true"></span>questionnaire-review</span></div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>extract</code> <code>stats</code> <code>leads</code></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. Reads your Claude Code session logs; <code>leads</code> replaces secret-shaped strings with [redacted].</span><span class="zh" lang="zh-CN">不发送。读取 Claude Code 会话日志；<code>leads</code> 会把疑似密钥的字符串替换成 [redacted]。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>classify</code></span>
+          <span role="cell" class="f-what"><span class="en">Each question (first 600 characters), its options, which one was recommended, your answer (first 600 characters) and whether you took the recommendation. 25 questions per call.</span><span class="zh" lang="zh-CN">每道题（前 600 字符）、选项、推荐的是哪个、你的回答（前 600 字符），以及你是否照推荐选。每次 25 道。</span></span>
+          <span role="cell" class="f-to"><span class="en">Anthropic, through <code>claude -p</code> with no tools (Claude Haiku by default)</span><span class="zh" lang="zh-CN">Anthropic，经 <code>claude -p</code>，不带工具（默认 Claude Haiku）</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><span class="en">the hook</span><span class="zh" lang="zh-CN">钩子</span></span>
+          <span role="cell" class="f-what"><span class="en">Nothing over the network. The checklist it returns becomes part of that Claude conversation. It runs only in a project where you registered it; installing the plugin doesn’t.</span><span class="zh" lang="zh-CN">不走网络。它退回的清单会成为那段 Claude 对话的一部分。只在你登记过它的项目里运行，装插件本身不会登记。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+      </div>
+
+      <div class="flow-group" role="rowgroup" style="--accent: var(--amber)">
+        <div class="flow-skill" role="row"><span role="cell" class="skill-tag"><span class="dot" aria-hidden="true"></span>agent-eval</span></div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>extract</code> <code>find_snapshot</code></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. Reads the logs of the projects you name, and a checkout’s git reflog.</span><span class="zh" lang="zh-CN">不发送。读取你指定项目的日志，以及仓库的 git reflog。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>classify</code></span>
+          <span role="cell" class="f-what"><span class="en">Per message: your text (first 1,500 characters), the end of the agent turn (last 1,200), your previous message (first 600). 20 messages per call.</span><span class="zh" lang="zh-CN">每条：你的原文（前 1,500 字符）、agent 回复的结尾（后 1,200 字符）、你的上一条消息（前 600 字符）。每次 20 条。</span></span>
+          <span role="cell" class="f-to"><span class="en">Anthropic through <code>claude -p</code> (default, Claude Haiku), or OpenAI through <code>codex exec</code> if you choose</span><span class="zh" lang="zh-CN">Anthropic，经 <code>claude -p</code>（默认 Claude Haiku）；你选择时改经 <code>codex exec</code> 发给 OpenAI</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><code>run</code> <code>adopt</code> <code>judge</code> <code>calibrate</code></span>
+          <span role="cell" class="f-what"><span class="en">A candidate gets the case prompt and reads files from the snapshot. The reviewer gets the case and the answer. A judge gets the case, its Trap and rubric and the answer, plus the diff and test results for an implementation case.</span><span class="zh" lang="zh-CN">候选模型拿到题目提示词，并读取快照里的文件；评审拿到题目和答案；judge 拿到题目、判定标准、细则和答案，实现题另加 diff 和测试结果。</span></span>
+          <span role="cell" class="f-to"><span class="en">The models in your config, through <code>claude</code> (Anthropic), <code>codex</code> (OpenAI), or your own gateway if you set one</span><span class="zh" lang="zh-CN">配置里的模型：经 <code>claude</code>（Anthropic）、<code>codex</code>（OpenAI），或你自己设置的网关</span></span>
+        </div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><span class="en">case pages</span><span class="zh" lang="zh-CN">选题页、审题页</span></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. When you open the pages it writes, they load IBM Plex fonts.</span><span class="zh" lang="zh-CN">不发送。打开它生成的页面时，页面会加载 IBM Plex 字体。</span></span>
+          <span role="cell" class="f-to"><span class="en">Google Fonts (a font request)</span><span class="zh" lang="zh-CN">Google Fonts（仅字体请求）</span></span>
+        </div>
+      </div>
+
+      <div class="flow-group" role="rowgroup" style="--accent: var(--pink)">
+        <div class="flow-skill" role="row"><span role="cell" class="skill-tag"><span class="dot" aria-hidden="true"></span>i-have-ocd</span></div>
+        <div class="flow-row" role="row">
+          <span role="cell" class="f-step"><span class="en">every step</span><span class="zh" lang="zh-CN">所有步骤</span></span>
+          <span role="cell" class="f-what"><span class="en">Nothing. It reads no logs.</span><span class="zh" lang="zh-CN">不发送。它不读任何日志。</span></span>
+          <span role="cell" class="f-to f-none"><span class="en">No one</span><span class="zh" lang="zh-CN">不发送</span></span>
+        </div>
+      </div>
+    </div>
+
+    <p class="note en">The model gateway is off unless your agent-eval config sets <code>gateway</code>. The plugin never supplies a gateway address. The providers handle what they receive under their own terms, as they do your other prompts.</p>
+    <p class="note zh" lang="zh-CN">模型网关默认关闭，只有 agent-eval 配置里设了 <code>gateway</code> 才会启用，插件从不提供网关地址。服务商按各自的条款处理收到的内容，和处理你其他提示词一样。</p>
+    <p class="links-row">
+      <a href="https://github.com/luoy2/skills/blob/main/PRIVACY.md"><span class="en">Privacy policy</span><span class="zh" lang="zh-CN">隐私政策</span></a>
+      <a href="https://github.com/luoy2/skills#what-it-reads-and-where-it-sends-data"><span class="en">Every step in the README</span><span class="zh" lang="zh-CN">README 里的逐步说明</span></a>
+    </p>
+  </div>
+</section>
+
+<!-- Requirements -->
+<section class="section reqs" id="requirements" aria-labelledby="reqs-title">
+  <div class="wrap">
+    <h2 id="reqs-title"><span class="en">Requirements</span><span class="zh" lang="zh-CN">运行要求</span></h2>
+    <div class="req-grid">
+      <div class="req" style="--accent: var(--amber)">
+        <h3 class="skill-tag"><span class="dot" aria-hidden="true"></span>agent-eval</h3>
+        <ul>
+          <li><span class="en">macOS for model runs (they use <code>sandbox-exec</code>)</span><span class="zh" lang="zh-CN">模型运行需要 macOS（用到 <code>sandbox-exec</code>）</span></li>
+          <li><a href="https://docs.astral.sh/uv/">uv</a></li>
+          <li><span class="en">The <code>claude</code> and <code>codex</code> CLIs with native logins, or your own OpenAI- or Anthropic-compatible gateway</span><span class="zh" lang="zh-CN"><code>claude</code> 和 <code>codex</code> 命令行工具（原生登录），或你自己的 OpenAI / Anthropic 兼容网关</span></li>
+        </ul>
+      </div>
+      <div class="req" style="--accent: var(--cyan)">
+        <h3 class="skill-tag"><span class="dot" aria-hidden="true"></span>questionnaire-review</h3>
+        <ul>
+          <li>Claude Code</li>
+          <li><span class="en">Python 3.11+ or <a href="https://docs.astral.sh/uv/">uv</a></span><span class="zh" lang="zh-CN">Python 3.11+ 或 <a href="https://docs.astral.sh/uv/">uv</a></span></li>
+          <li><code>node</code></li>
+          <li><span class="en">The <code>claude</code> CLI, for the classifier</span><span class="zh" lang="zh-CN"><code>claude</code> 命令行工具，分类时要用</span></li>
+        </ul>
+      </div>
+      <div class="req" style="--accent: var(--pink)">
+        <h3 class="skill-tag"><span class="dot" aria-hidden="true"></span>i-have-ocd</h3>
+        <ul>
+          <li><span class="en">Nothing extra</span><span class="zh" lang="zh-CN">不需要额外工具</span></li>
+          <li><span class="en">Keeps its state in one Markdown file per project under <code>~/.local/state/i-have-ocd/</code>, or in focus tools if your session has them</span><span class="zh" lang="zh-CN">状态存在 <code>~/.local/state/i-have-ocd/</code> 下，每个项目一个 Markdown 文件；会话里有 focus 工具时就用那些工具</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-row">
+    <p class="footer-brand">
+      <span class="en">Agent Retro is the <code>luoy2-skills</code> plugin, by <a href="https://github.com/luoy2">luoy2</a>.</span>
+      <span class="zh" lang="zh-CN">Agent Retro 即 <code>luoy2-skills</code> 插件，作者 <a href="https://github.com/luoy2">luoy2</a>。</span>
+    </p>
+    <ul class="footer-links">
+      <li><a href="https://github.com/luoy2/skills">GitHub</a></li>
+      <li><a href="https://github.com/luoy2/skills/issues"><span class="en">Issues</span><span class="zh" lang="zh-CN">问题反馈</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/security/advisories/new"><span class="en">Report a security problem</span><span class="zh" lang="zh-CN">私下报告安全问题</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/blob/main/PRIVACY.md"><span class="en">Privacy</span><span class="zh" lang="zh-CN">隐私政策</span></a></li>
+      <li><a href="https://github.com/luoy2/skills/blob/main/LICENSE"><span class="en">MIT License</span><span class="zh" lang="zh-CN">MIT 许可</span></a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>
