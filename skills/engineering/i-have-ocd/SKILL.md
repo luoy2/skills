@@ -26,6 +26,9 @@ The state is small: the current main line, and a queue of parked items.
   (title, done-when, next step, paused-for) and a `## Parked` list, one item per
   line. It is visible only on this machine; say so once when you create it.
 
+The store holds open work only. A parked item leaves it once it is handled
+(rule 7), so the store stays small however long the work runs.
+
 A main line has a title, a done-when criterion (a link to the plan, issue or
 milestone that defines it), and the next step. If none is set, ask the owner
 which one it is before starting work, as a single question.
@@ -63,12 +66,20 @@ which one it is before starting work, as a single question.
    side lines", "看支线"), group them by area. For each group, write a short
    plan: what to do, in what order, and what the owner must decide. Do this
    before any fix. Ask the decisions together, then let the owner pick what
-   becomes the next main line. Mark items done or dropped with a reason. Never
-   delete them silently.
+   becomes the next main line.
+8. **Clear handled items.** An item is handled once it is filed as a ticket,
+   scheduled at a time, done, or dropped by the owner; a filed ticket counts as
+   handled by the owner. From then on the ticket or the scheduled item is its
+   record, so remove it from the queue. With focus tools, close it with the
+   ticket number, the scheduled item's id or the drop reason as the receipt;
+   the tools keep the history and list only open items. In the local file,
+   delete the line. Say in the reply what left the queue (`cleared: #N, #M`),
+   so nothing disappears unseen.
 
 ## Done when
 
 - The main line's done-when criterion is met, and the owner confirms or names
   the next main line.
-- The store shows every parked item as open, taken, done or dropped with a
-  reason. Nothing that was reported during the work exists only in chat.
+- Every item reported during the work is either still open in the store or
+  recorded elsewhere: a ticket, a scheduled item, or the owner's drop decision.
+  Nothing exists only in chat, and nothing handled stays in the store.
