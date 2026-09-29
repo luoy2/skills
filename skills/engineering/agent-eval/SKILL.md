@@ -46,8 +46,12 @@ it; read only that one.
    attachments, a two-level Trap (`direction`: right way; `pass`: done right),
    yes/no rubric items that each name their evidence, accepted equivalents, leak
    markers absent from the snapshot, the original agent's answer as the
-   calibration negative, and — when the agent answered again after the correction
-   and the owner accepted it — that answer as the calibration positive. → `references/case-authoring.md` §Writing
+   calibration negative, and the answer the owner accepted after the correction as
+   the calibration positive (required: a case without one cannot run). An
+   implementation case adds hidden tests that assert behaviour, not wording, and
+   at least one alternative implementation (`alt_patches`); `evalkit.py lint-case`
+   flags asserted wording and names the candidate never sees, and Trap wording a
+   judge can misread. → `references/case-authoring.md` §Writing
 5. **Owner review.** `scripts/review_page.py` renders every case exactly as the
    candidate will see it; the owner marks each item agree / change / drop and
    pastes the result back. Apply every mark, then re-render. Publish the page
@@ -55,9 +59,12 @@ it; read only that one.
 6. **Isolation and calibration.** `evalkit.py check-isolation --case X` must pass
    for every case and `--plant` must fail; `evalkit.py calibrate` must show both
    judges failing both Trap levels on every calibration negative and passing both
-   on every calibration positive. A failed positive means the Trap asks for more
-   than the owner did, or a judge is too strict — fix that before running models.
-   → `references/running.md` §Isolation
+   on every calibration positive; for an implementation case `calibrate-tests`
+   must pass (bare fails, reference passes, alternatives fail only excused tests,
+   no lint error). A failed positive means the Trap asks for more than the owner
+   did, or a judge is too strict — fix that before running models. `run` refuses
+   any case without passing records for its current digest.
+   → `references/running.md` §Isolation, §Calibration gate
 7. **Smoke, then the matrix.** A handful of cheap runs through every client path
    first; then `evalkit.py run` with a budget stop, a periodic progress check and
    snapshot cleanup. After any fix to cost accounting, `evalkit.py recompute`.
@@ -84,6 +91,7 @@ uv run --locked --script $K --config agent-eval/config.json run --batch b1 --par
 uv run --locked --script $K --config agent-eval/config.json judge --batch b1 --parallel 6
 uv run --locked --script $K --config agent-eval/config.json report --batch b1
 # implementation cases (config `implement`): hidden tests must calibrate first
+uv run --locked --script $K --config agent-eval/config.json lint-case --case <case>
 uv run --locked --script $K --config agent-eval/config.json calibrate-tests --case <impl case>
 uv run --locked --script $K --config agent-eval/config.json run --batch i1 --cases <impl case> --budget 300
 # forced adoption of earlier reviews, cheap follow-up:
@@ -111,4 +119,5 @@ so a changed prompt starts a new batch.
 Read `references/pitfalls.md` once per eval. Each item there cost a real batch:
 a disk filled by unremoved snapshots, subagent tokens missed so cost was
 several times too low, an effort mismatch that was really a subagent, a Trap no model could
-pass, and a "review is useless" conclusion the raw answers contradicted.
+pass, a "review is useless" conclusion the raw answers contradicted, and five
+cases that passed every old gate while measuring the wrong thing.

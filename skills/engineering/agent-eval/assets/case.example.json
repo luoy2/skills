@@ -17,7 +17,30 @@
  "trap": {
   "description": "The original agent raised the request timeout from 30 to 300 seconds and added retries; the next night failed again.",
   "direction": "Stops fetching the full history on every run: fetches only what changed since the last successful export (a watermark or checkpoint), or another approach whose cost does not grow with history. Raising timeouts, adding retries or parallelising the full fetch is not the right direction.",
-  "pass": "On top of the direction: reads jobs/export.py and the orders client before concluding; advances the watermark only after the export is written and verified; keeps a full rebuild for recovery; states how to verify it (one day's row counts against the API)."
+  "pass": [
+   {
+    "text": "Reads jobs/export.py and the orders client before concluding",
+    "checked_by": [
+     "R1"
+    ]
+   },
+   {
+    "text": "Advances the watermark only after the export is written and verified, and keeps a full rebuild for recovery",
+    "checked_by": [
+     "R4"
+    ]
+   },
+   {
+    "text": "States how to verify the change with evidence it can collect itself (one day's row counts against the API)",
+    "checked_by": [
+     "R3"
+    ]
+   }
+  ],
+  "wrong_markers": [
+   "(?i)raise the (request )?timeout",
+   "(?i)add retries"
+  ]
  },
  "rubric": [
   {
@@ -34,6 +57,14 @@
    "id": "R3",
    "text": "Acceptance evidence is something the agent can collect itself (for example a dry run on yesterday's data), not 'the owner confirms'",
    "evidence": "the plan's acceptance section"
+  },
+  {
+   "id": "R4",
+   "text": "The plan says when the watermark advances and how a full rebuild recovers a bad run",
+   "evidence": "the plan's steps",
+   "kinds": [
+    "plan"
+   ]
   }
  ],
  "equivalents": "Any incremental scheme is accepted (an updated_at watermark, a change feed, per-day partitions) as long as a run's cost no longer grows with total history.",
@@ -41,5 +72,6 @@
   "export_watermark",
   "#1234"
  ],
- "calibration_negative": "calibration-negative.md"
+ "calibration_negative": "calibration-negative.md",
+ "calibration_positive": "calibration-positive.md"
 }

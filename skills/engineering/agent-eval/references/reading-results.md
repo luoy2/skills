@@ -3,7 +3,24 @@
 - **Sample size first.** With 3 cases and one run per cell, one rubric item is
   ~14 points. Say so next to every comparison, and repeat top candidates before
   ranking them.
-- **Both judges must agree** for a pass; list disagreements for the owner.
+- **Both judges must agree** for a pass; the report lists each disagreement with
+  the item's text and both judges' verdicts and evidence, so the owner can rule on
+  the wording (one clause read literally by one judge and by purpose by the other
+  caused 8 of 11 disputes on one case).
+- **Read an implementation case's ceiling before its scores.** Under each table the
+  report names the tests the reference passes that no candidate passed, the
+  reachable ceiling they leave (scored tests less those), and the candidates'
+  range. Tests nobody passes usually encode something the case never disclosed;
+  read them before calling the models weak. When the range is below
+  `implement.min_spread` (default 3) the case is marked "no discrimination": it does
+  not rank the candidates, whatever the means say.
+- **Baseline cases are not a comparison.** A case with `"role": "baseline"` sits
+  under its own heading: it shows whether an implementer can finish an approved
+  plan. Leave it out of model rankings.
+- **Timed-out runs stay invalid but keep their tests.** Each arm with timeouts gets
+  its own "timed out n/m" row with the tests each run had passed when the clock
+  stopped; a high effort that times out at the same score as a finished lower one
+  is a cost finding. What invalid runs spent is on its own line under the run cost.
 - **A Trap nobody passes carries no signal.** First check the calibration positive:
   if a judge fails the owner-accepted answer, the condition or the judge is the
   problem, not the models. Check the `direction` level; if that

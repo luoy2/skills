@@ -216,9 +216,16 @@
   }
  },
  "implement": {
-  "_note": "Implementation cases. Implementers are sandboxed with write tools; a Claude implementer must use the gateway (its native login lives outside the sandbox). test_python is a dependency-only venv: never an editable install of the repository, or the candidate could read the real tree through it.",
+  "_note": "Implementation cases. timeouts gives each implementer effort its time limit in seconds (default 3600; --timeout overrides); min_spread is the candidates' range of passed tests below which the report marks a case as not discriminating. Implementers are sandboxed with write tools; a Claude implementer must use the gateway (its native login lives outside the sandbox). test_python is a dependency-only venv: never an editable install of the repository, or the candidate could read the real tree through it.",
   "test_python": "~/.local/share/agent-eval/venv/bin/python",
   "test_timeout": 900,
+  "timeouts": {
+   "medium": 3600,
+   "high": 3600,
+   "xhigh": 5400,
+   "max": 7200
+  },
+  "min_spread": 3,
   "repeats": 2,
   "modes": [
    "direct",
@@ -302,6 +309,12 @@
      "max"
     ]
    }
+  ]
+ },
+ "lint": {
+  "_note": "Phrases lint-case warns on when a case's trap.direction contains one: wording two judges read two ways.",
+  "direction_forbidden": [
+   "not as an option with preconditions"
   ]
  },
  "overlay_dir": null,

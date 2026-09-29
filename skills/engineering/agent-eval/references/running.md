@@ -24,7 +24,10 @@ plans for itself), `split-<planner id>` (a planner from `implement.planners`
 writes one read-only plan per case and repeat, shared by every implementer) and
 `given-plan` (the case carries the approved plan). `repeats` defaults to
 `implement.repeats`; `--budget` stops launching new runs once spent. Cost of a split
-run includes its plan in full, since each real delivery pays for its plan.
+run includes its plan in full, since each real delivery pays for its plan. An
+implementer's time limit is `--timeout` if given, else `implement.timeouts[<effort>]`,
+else 3600 s; every row records the `timeout_s` it ran under. One limit for every
+effort cut four high-effort runs short at 267–269 of 285 tests.
 
 Measuring an instruction change (a new AGENTS.md or SOP): keep cases and snapshots
 fixed and set `overlay_dir` to a folder that mirrors repository paths. Its files
@@ -85,6 +88,24 @@ output is not measuring the model.
 - Hidden tests are copied in only after the candidate stops, then run in the same
   sandbox with `PYTHONPATH` set to the snapshot. The diff is captured first.
 - Judges see the prompt, trajectory and answer, never the model name.
+
+## Calibration gate
+
+`run` and `adopt` launch nothing until every selected case is calibrated in its
+current state. Each case has a digest over every file of its directory and
+`common.json`; `calibrate` writes `results_dir/calibrations/judges-<case>-<digest>.json`
+and `calibrate-tests` writes `tests-<case>-<digest>.json`. A run needs a passing
+judges record (both judges fail the negative and pass the positive; a case with no
+positive fails) and, for an implementation case, a passing tests record (bare fails,
+reference passes, every alternative fails only excused tests, `lint-case` has no
+error). Any edit to a case file, a hidden test or the shared rubric changes the
+digest, so recalibrate after it. The refusal names the case, its digest and the
+command; `run --dry-run` lists the gaps without refusing. There is no bypass: a case
+that cannot be calibrated is fixed or dropped. Each ledger row records the
+`case_digest` it ran on.
+
+`lint-case --case X` runs the case checks on their own (no model call; an
+implementation case reads its snapshot from the repository). It exits 1 on an error.
 
 ## Running
 

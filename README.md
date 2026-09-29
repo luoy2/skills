@@ -82,7 +82,10 @@ How it works:
    always run inside that sandbox, and the kit refuses to start a
    write-capable Claude that isn't. Both judges (from different vendors) must
    fail the original wrong answer and pass the answer you accepted before any
-   model is scored.
+   model is scored. An implementation case's hidden tests must also accept at
+   least one other reasonable implementation, and must not assert wording or
+   names the candidate is never shown (`lint-case`). The kit refuses to run a
+   case whose current files have not passed these checks.
 5. **Run the matrix.** Planning cases score an answer plus a delivery plan.
    Implementation cases let the candidate edit code, then score it with the
    real fix's own tests, placed only after the candidate stops. Delivery modes:
@@ -209,7 +212,7 @@ installing the plugin doesn't register it.
 | `find_snapshot.py` | A checkout's git reflog | Nothing | Standard output |
 | `picker_page.py`, `review_page.py` | Candidate and case files | Nothing. The pages they write load the IBM Plex fonts from Google Fonts when you open them | An HTML page |
 | `evalkit.py run`, `adopt`, `judge`, `calibrate` | The config, the cases, and your repository's tracked files at each case's commit (`git archive`) | The models in the config (candidates, reviewer, judges), through `claude` (Anthropic), `codex` (OpenAI) or, if you set one, your own gateway. A candidate gets the case prompt (the messages, facts and attachments written in the case) and reads files from the snapshot; the reviewer gets the case and the candidate's answer; a judge gets the case, its Trap and rubric and the answer, plus the diff and test results for an implementation case. Your gateway also gets the key that your `token_command` prints | Snapshots and each run's output under `scratch_root`; ledgers and reports under `results_dir` |
-| `evalkit.py check-isolation`, `calibrate-tests`, `recompute`, `report`, `text` | The config, cases, snapshots and results | Nothing | Files under `scratch_root` and `results_dir`, reports |
+| `evalkit.py check-isolation`, `calibrate-tests`, `lint-case`, `recompute`, `report`, `text` | The config, cases, snapshots and results | Nothing | Files under `scratch_root` and `results_dir`, reports |
 
 A Codex model and an implementation run start with a minimal environment:
 `PATH`, your gateway key if you use one, and `HOME` and `TMPDIR` inside the
