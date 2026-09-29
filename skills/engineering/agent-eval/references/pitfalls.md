@@ -7,7 +7,7 @@
 | Attachment header explained the case | Hint visible to candidates | Strip authoring notes from attachments |
 | Your own memory notes contained the answers | Leak into any unisolated run | Isolation denies the whole home tree; leak markers include eval-internal names |
 | Codex sandbox denied all reads under /private/tmp | Codex aborted at start (`exit -6`, canonicalize CODEX_HOME) | Deny `file-read-data`, not `file-read*` |
-| Codex read-only sandbox still reads everything | Candidate read scratch notes with the answer | Wrap Codex in `sandbox-exec` |
+| Codex read-only sandbox still reads everything | Candidate read scratch notes with the answer | Wrap Codex in `sandbox-exec` / `bwrap` |
 | Snapshots never removed (a full checkout each) | Disk full partway through the batch; runner crashed with ENOSPC | Runner deletes `wt/` per run; monitor free disk |
 | Fresh CODEX_HOME unpacks a large `.tmp` | Tens of GB of judge dirs in one evening | Runner deletes `.tmp` and judge workdirs |
 | Codex subagents write separate rollouts | Cost under-counted several times over on high-effort runs; false effort mismatch | Bill every rollout; effort from the main thread; `recompute` |

@@ -37,7 +37,8 @@ npx skills@1.7.0 add luoy2/skills
 `agent-eval` and `questionnaire-review` run on your own computer, in Claude Code
 or Codex. They read your local session logs and run the `claude` and `codex` command-line tools, so they
 don't work in claude.ai chat or Cowork: the skills load there but can reach
-neither. agent-eval's model runs also need macOS, for `sandbox-exec`.
+neither. agent-eval's model runs also need a sandbox: `sandbox-exec` on macOS or
+`bwrap` (bubblewrap) on Linux.
 [What each step reads and sends](#what-it-reads-and-where-it-sends-data) is
 listed below.
 
@@ -69,14 +70,16 @@ How it works:
 3. **Review the cases.** An annotatable page shows each case exactly as the
    candidate will see it; you mark every item agree / change / drop.
 4. **Isolate and calibrate.** Each run gets a fresh one-commit snapshot with no
-   later history, no credentials and no memory files. Codex runs inside macOS
-   `sandbox-exec`: outside the run's own folder it cannot read files under the
-   config's `deny_roots` (by default `/Users`, `/Volumes` and `/private/tmp`)
-   or write anywhere but the system temp folders. It can still use the network.
+   later history, no credentials and no memory files. Codex runs inside
+   `sandbox-exec` on macOS or `bwrap` on Linux: outside the run's own folder it
+   cannot read files under the config's `deny_roots` (by default `/Users`,
+   `/Volumes` and `/private/tmp` on macOS; `/home`, `/tmp`, `/run` and the other
+   user-data and mount trees on Linux) or write anywhere but the system temp
+   folders. It can still use the network.
    A planning Claude run gets read-only tools on the snapshot. Implementation
    runs turn off the candidate's permission prompts so it can edit the snapshot
    (Claude `--dangerously-skip-permissions`, Codex `danger-full-access`); they
-   always run inside `sandbox-exec`, and the kit refuses to start a
+   always run inside that sandbox, and the kit refuses to start a
    write-capable Claude that isn't. Both judges (from different vendors) must
    fail the original wrong answer and pass the answer you accepted before any
    model is scored.
@@ -95,7 +98,7 @@ your new `AGENTS.md` or SOP files laid over the old snapshots. Every prompt,
 report and page string comes from one text table; to run in another language,
 name a translated table as `text` in the config.
 
-Requirements: macOS (for `sandbox-exec`), [uv](https://docs.astral.sh/uv/), the
+Requirements: macOS (`sandbox-exec`) or Linux with bubblewrap (`bwrap`), [uv](https://docs.astral.sh/uv/), the
 `claude` and `codex` CLIs with native logins, or your own
 OpenAI/Anthropic-compatible gateway. Start with
 `skills/engineering/agent-eval/SKILL.md`; the agent walks you through scoping,

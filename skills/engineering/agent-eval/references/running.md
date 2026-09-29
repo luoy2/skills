@@ -43,11 +43,29 @@ output is not measuring the model.
 
 - Snapshot: `git archive <sha>` into a fresh one-commit repository, so history after
   the snapshot is invisible. Placed attachments are added untracked.
-- Codex candidates run under `sandbox-exec` with `file-read-data` and writes
-  denied under the configured roots except the run directory. Deny content reads,
-  not all reads: Codex canonicalizes CODEX_HOME at start and aborts if it cannot
-  stat parent directories. HOME, TMPDIR and CODEX_HOME live in the run directory;
-  the only credential is the gateway key (or a copied native `auth.json`).
+- Codex candidates run in a sandbox that denies reading and writing under the
+  configured `isolation.deny_roots` except the run directory. `isolation.sandbox`
+  picks it, by default from the platform:
+  - `sandbox-exec` (macOS): an SBPL profile denying `file-read-data` and writes
+    under `/Users`, `/Volumes`, `/private/tmp`. Deny content reads, not all reads:
+    Codex canonicalizes CODEX_HOME at start and aborts if it cannot stat parent
+    directories.
+  - `bwrap` (Linux): the host tree read-only, an empty tmpfs over each deny root
+    (`/home`, `/root`, `/mnt`, `/media`, `/nas`, `/srv`, `/tmp`, `/var/tmp`, `/run`;
+    a file root such as a service socket is covered by `/dev/null`), `allow_read`
+    and the resolver bound back read-only, the run directory bound read-write last,
+    private `/dev`, `/proc`, PID, IPC and UTS namespaces; the network is shared.
+    Add any other data tree a machine has (a NAS mount, a data disk, a private
+    folder under `/opt`) to that host's `deny_roots`.
+
+  HOME, TMPDIR and CODEX_HOME live in the run directory; the only credential is the
+  gateway key (or a copied native `auth.json`).
+- One config for several machines: `hosts.<name>` holds what differs (`scratch_root`,
+  `results_dir`, `claude_bin`, `codex_bin`, `gateway.token_command`, `isolation`,
+  `implement.test_python`). The entry whose name matches the short hostname
+  (case-insensitive) is merged over the top level, a nested object one level deep;
+  `--host <name>` picks an entry explicitly and fails if it is not declared. A host
+  cannot set `text`. `check-isolation` prints the host and sandbox it used.
 - Claude candidates run with `--restricted --tools Read,Glob,Grep
   --strict-mcp-config`: no user settings, global CLAUDE.md or memory, file tools
   confined to the snapshot. `--restricted` also skips project instruction

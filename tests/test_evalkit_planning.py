@@ -198,12 +198,17 @@ def test_the_candidate_builders_never_hand_over_a_credential(kit, tmp_path, monk
     assert kit.forbidden_env(kit.codex_env(tmp_path, tmp_path / "c", "k"), "codex", "gateway") == []
 
 
-def test_a_codex_run_without_a_sandbox_profile_fails(kit, tmp_path):
-    failures = kit.isolation_check(_root(tmp_path), [], "p", {}, "codex", "gateway", profile_path=None)
-    assert any("sandbox profile" in f for f in failures)
+@pytest.mark.parametrize("wrap", [False, None])
+def test_a_codex_run_not_wrapped_in_its_sandbox_fails(kit, tmp_path, monkeypatch, wrap):
+    """An argv built outside `sandboxed`, or none at all, fails even when the probes pass."""
+    monkeypatch.setattr(kit, "probe_sandbox", lambda root, denied: [])
+    argv = None if wrap is None else [kit.CODEX_BIN, "exec", "-"]
+    failures = kit.isolation_check(_root(tmp_path), [], "p", {}, "codex", "gateway", argv=argv)
+    assert any("not wrapped" in f for f in failures)
 
 
-def test_the_sandbox_profile_denies_user_data_and_other_temp_trees_but_not_the_run(kit, tmp_path):
+def test_the_sandbox_profile_denies_user_data_and_other_temp_trees_but_not_the_run(kit, tmp_path, monkeypatch):
+    monkeypatch.setattr(kit, "DENY_ROOTS", kit.DEFAULT_DENY_ROOTS["sandbox-exec"])
     profile = kit.sandbox_profile(tmp_path)
     deny = re.search(r'\(deny file-read-data file-write\*([^\n]*)\)', profile).group(1)
     for tree in ("/Users", "/Volumes", "/private/tmp"):

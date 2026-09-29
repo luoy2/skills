@@ -90,9 +90,13 @@ uv run --locked --script $K --config agent-eval/config.json run --batch i1 --cas
 uv run --locked --script $K --config agent-eval/config.json adopt --batch b2 --from-batch b1 --efforts high --repeats 2
 ```
 
-Requirements: macOS `sandbox-exec` for Codex isolation, the `claude` and `codex`
-CLIs, and either native logins or a gateway (`gateway` in the config). Cases,
-config and results can live anywhere; set the paths in the config.
+Requirements: a sandbox for Codex and implementation runs (macOS `sandbox-exec`, or
+Linux `bwrap` from bubblewrap; picked by platform, `isolation.sandbox` overrides),
+the `claude` and `codex` CLIs, and either native logins or a gateway (`gateway` in
+the config). Cases, config and results can live anywhere; set the paths in the
+config. When one config serves several machines, put each machine's paths, binaries
+and isolation under `hosts.<hostname>`; the entry named like the machine applies, or
+the one `--host <name>` names. → `references/running.md` §Isolation
 
 Every string that candidates, the reviewer, the judges and the owner read (prompts,
 reports, both pages) is in one text table. For another language, write the whole

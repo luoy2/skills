@@ -22,10 +22,11 @@ the plan once per case and repeat, and every implementer receives that same
 plan) or `given-plan` (the case itself carries the approved plan).
 
 Isolation is the precondition for every number. Codex candidates run inside a
-macOS sandbox that denies content reads outside the run directory; Claude
-candidates run in `--restricted` mode with read-only file tools confined to the
-snapshot. All repository and machine specifics come from the config file
-(`--config`, see the skill's assets/config.example.json).
+sandbox (macOS `sandbox-exec` or Linux `bwrap`) that denies content reads outside
+the run directory; Claude candidates run in `--restricted` mode with read-only
+file tools confined to the snapshot. All repository and machine specifics come
+from the config file (`--config`, see the skill's assets/config.example.json);
+its `hosts` entries let one config serve several machines.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -63,7 +65,19 @@ GATEWAY_KEY_ENV = "AGENT_EVAL_GATEWAY_KEY"
 INSTRUCTIONS_FILE = "AGENTS.md"
 # Files laid over every snapshot at their relative paths (config overlay_dir); None keeps snapshots as archived.
 OVERLAY_DIR: Path | None = None
-DENY_ROOTS = ("/Users", "/Volumes", "/private/tmp")
+# The sandbox that confines candidates, by platform; config isolation.sandbox overrides.
+PLATFORM_SANDBOX = {"darwin": "sandbox-exec", "linux": "bwrap"}
+# User data, mounts, shared temp trees and (on Linux) local service sockets such as Docker's,
+# whose contents a candidate must not reach; config isolation.deny_roots overrides. /opt,
+# /usr/local and /etc stay readable: candidate CLIs install there.
+DEFAULT_DENY_ROOTS = {
+    "sandbox-exec": ("/Users", "/Volumes", "/private/tmp"),
+    "bwrap": ("/home", "/root", "/mnt", "/media", "/nas", "/srv", "/tmp", "/var/tmp", "/run"),
+}
+SANDBOX = PLATFORM_SANDBOX.get(sys.platform, "")
+DENY_ROOTS = DEFAULT_DENY_ROOTS.get(SANDBOX, ())
+BWRAP = "/usr/bin/bwrap"
+HOST: str | None = None
 CLAUDE_TOOLS = "Read,Glob,Grep"
 IMPL_TOOLS = "Read,Glob,Grep,Edit,Write,Bash"
 # Paths a sandboxed candidate may read besides its run directory: the shared
@@ -245,13 +259,40 @@ def fill_text(page):
     return re.sub(r"%%([a-z]+\.[a-z_]+)%%", lambda m: T[m.group(1)], page)
 
 
-def configure(path):
-    """Load the eval config; relative paths resolve against the config file's directory."""
+def host_config(cfg, host=None):
+    """The config with this machine's `hosts` entry merged over the top level, and that entry's name.
+
+    One repository's config serves several machines, whose paths, binaries and sandbox differ.
+    The entry is the one named by `host`, else the one matching this machine's short hostname
+    (case-insensitive); a named host that is not declared is an error. A nested dict merges one
+    level deep, so a host can replace isolation.deny_roots alone. A host may not replace the
+    text: the text digest would then differ by machine.
+    """
+    hosts = cfg.get("hosts") or {}
+    names = {k.lower(): k for k in hosts}
+    wanted = (host or socket.gethostname().split(".")[0]).lower()
+    if host is not None and wanted not in names:
+        raise EvalError(f"--host {host} is not declared under hosts (declared: {sorted(hosts)})")
+    merged = {k: v for k, v in cfg.items() if k != "hosts"}
+    name = names.get(wanted)
+    if name is None:
+        return merged, None
+    if "text" in hosts[name]:
+        raise EvalError(f"hosts.{name} sets text; the text must be the same on every machine")
+    for key, value in hosts[name].items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            value = {**merged[key], **value}
+        merged[key] = value
+    return merged, name
+
+
+def configure(path, host=None):
+    """Load the eval config for this machine; relative paths resolve against the config file's directory."""
     global CFG, REPO, CASES, RESULTS, SCRATCH_ROOT, CLAUDE_BIN, CODEX_BIN, GATEWAY_URL, \
-        GATEWAY_TOKEN_COMMAND, GATEWAY_KEY_ENV, INSTRUCTIONS_FILE, DENY_ROOTS, FORBIDDEN_ENV_PREFIXES, \
-        ALLOW_READ, TEST_PYTHON, OVERLAY_DIR, T, TEXT_DIGEST
+        GATEWAY_TOKEN_COMMAND, GATEWAY_KEY_ENV, INSTRUCTIONS_FILE, SANDBOX, DENY_ROOTS, FORBIDDEN_ENV_PREFIXES, \
+        ALLOW_READ, TEST_PYTHON, OVERLAY_DIR, HOST, T, TEXT_DIGEST
     path = Path(path).expanduser().resolve()
-    CFG = json.loads(path.read_text(encoding="utf-8"))
+    CFG, HOST = host_config(json.loads(path.read_text(encoding="utf-8")), host)
     base = path.parent
 
     def rel(value):
@@ -271,7 +312,11 @@ def configure(path):
     INSTRUCTIONS_FILE = CFG.get("instructions_file", INSTRUCTIONS_FILE)
     OVERLAY_DIR = rel(CFG["overlay_dir"]) if CFG.get("overlay_dir") else None
     iso = CFG.get("isolation") or {}
-    DENY_ROOTS = tuple(iso.get("deny_roots", DENY_ROOTS))
+    SANDBOX = iso.get("sandbox") or PLATFORM_SANDBOX.get(sys.platform, "")
+    if SANDBOX not in DEFAULT_DENY_ROOTS:
+        raise EvalError(f"no sandbox {SANDBOX!r} on platform {sys.platform}: set isolation.sandbox to one of "
+                        f"{sorted(DEFAULT_DENY_ROOTS)}; candidates never run unsandboxed")
+    DENY_ROOTS = tuple(iso.get("deny_roots", DEFAULT_DENY_ROOTS[SANDBOX]))
     FORBIDDEN_ENV_PREFIXES = tuple(iso.get("forbidden_env_prefixes", FORBIDDEN_ENV_PREFIXES))
     # Both the configured path and its resolved target: a symlinked CLI is checked at each.
     ALLOW_READ = tuple(dict.fromkeys(q for p in iso.get("allow_read", [])
@@ -462,6 +507,61 @@ def sandbox_profile(root):
     )
 
 
+def under(path, roots):
+    """Whether `path` is one of `roots` or inside one."""
+    return any(path == r or path.startswith(r.rstrip("/") + "/") for r in roots)
+
+
+def bwrap_prefix(root):
+    """The SBPL profile's guarantees as bubblewrap mounts.
+
+    The host tree is read-only. Each deny root is replaced by an empty tmpfs (a denied file,
+    such as a service socket, by /dev/null), so its contents are neither readable nor
+    reachable, and a write there lands in memory that vanishes with the sandbox. Allowed
+    reads are bound back read-only over those, and the run root last, read-write, so
+    neither can be shadowed. Unlike SBPL, a denied tree's metadata is hidden too: bwrap
+    creates only the parents of what it binds, which is all Codex needs to canonicalize
+    CODEX_HOME. The resolver file is bound back when /run is denied, since the network is
+    shared by design.
+    """
+    root = os.path.realpath(root)
+    argv = [BWRAP, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"]
+    denied = []
+    for d in sorted({os.path.realpath(d) for d in DENY_ROOTS}, key=len):
+        if not os.path.lexists(d) or under(d, denied):
+            continue
+        argv += ["--tmpfs", d] if os.path.isdir(d) else ["--ro-bind", "/dev/null", d]
+        denied.append(d)
+    resolver = os.path.dirname(os.path.realpath("/etc/resolv.conf"))
+    bound = []
+    for p in sorted({*ALLOW_READ, resolver}, key=len):
+        if not os.path.lexists(p) or not under(p, denied) or under(p, bound):
+            continue
+        argv += ["--symlink", os.readlink(p), p] if os.path.islink(p) else ["--ro-bind", p, p]
+        bound.append(p)
+    return argv + ["--bind", root, root, "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--die-with-parent", "--"]
+
+
+def sandbox_prefix(root):
+    """The argv prefix that confines a command to the run root, for the configured sandbox."""
+    if SANDBOX == "sandbox-exec":
+        return ["/usr/bin/sandbox-exec", "-f", str(Path(root) / "sandbox.sb")]
+    if SANDBOX == "bwrap":
+        return bwrap_prefix(root)
+    raise EvalError(f"no sandbox configured (isolation.sandbox is {SANDBOX!r})")
+
+
+def sandboxed(root, argv):
+    """`argv` run inside the run root's sandbox; the one place a confined command is built."""
+    return [*sandbox_prefix(root), *argv]
+
+
+def prepare_sandbox(root):
+    """Write what the sandbox reads at launch: sandbox-exec reads a profile file; bwrap's policy is its argv."""
+    if SANDBOX == "sandbox-exec":
+        (Path(root) / "sandbox.sb").write_text(sandbox_profile(root), encoding="utf-8")
+
+
 # ----------------------------------------------------------------- isolation
 
 def leak_hits(paths_to_scan, markers):
@@ -493,17 +593,15 @@ def forbidden_env(env, runtime, client):
     return sorted(set(bad))
 
 
-def probe_sandbox(profile_path, root, denied_file):
+def probe_sandbox(root, denied_file):
     """The sandbox must refuse a file outside the run root and allow one inside it."""
     inside = Path(root) / "wt" / INSTRUCTIONS_FILE
     failures = []
-    outside = subprocess.run(["/usr/bin/sandbox-exec", "-f", str(profile_path), "/bin/cat", str(denied_file)],
-                             capture_output=True)
+    outside = subprocess.run(sandboxed(root, ["/bin/cat", str(denied_file)]), capture_output=True)
     if outside.returncode == 0:
         failures.append(f"sandbox allowed reading {denied_file}")
     if inside.exists():
-        ok = subprocess.run(["/usr/bin/sandbox-exec", "-f", str(profile_path), "/bin/cat", str(inside)],
-                            capture_output=True)
+        ok = subprocess.run(sandboxed(root, ["/bin/cat", str(inside)]), capture_output=True)
         if ok.returncode != 0:
             failures.append(f"sandbox refused the snapshot's own {inside}")
     return failures
@@ -520,18 +618,22 @@ def claude_argv_ok(argv):
     return failures
 
 
-def probe_test_python(profile_path, root):
+def probe_test_python(root):
     """The shared test interpreter must start inside the sandbox, or no hidden test can run."""
     if not TEST_PYTHON:
         return ["implement: config has no implement.test_python"]
-    proc = subprocess.run(["/usr/bin/sandbox-exec", "-f", str(profile_path), TEST_PYTHON, "-c", "import pytest"],
+    proc = subprocess.run(sandboxed(root, [TEST_PYTHON, "-c", "import pytest"]),
                           capture_output=True, text=True, cwd=root,
                           env={"PATH": "/usr/bin:/bin", "HOME": str(Path(root) / "home"), "TMPDIR": str(Path(root) / "tmp")})
     return [] if proc.returncode == 0 else [f"test python cannot start in the sandbox: {proc.stderr[-300:]}"]
 
 
-def isolation_check(root, markers, prompt, env, runtime, client, argv=None, profile_path=None, implement=False):
-    """Every failure is a reason not to launch. An empty list is the only pass."""
+def isolation_check(root, markers, prompt, env, runtime, client, argv=None, implement=False):
+    """Every failure is a reason not to launch. An empty list is the only pass.
+
+    A Codex or write-capable run is probed in the run root's sandbox (prepare_sandbox first)
+    and its argv must start with exactly the prefix `sandboxed` builds for that root.
+    """
     failures = []
     bad_env = forbidden_env(env, runtime, client)
     if bad_env:
@@ -543,15 +645,13 @@ def isolation_check(root, markers, prompt, env, runtime, client, argv=None, prof
         failures.append(f"leak markers found in: {hits[:5]}")
     if runtime == "codex" or implement:
         # Write-capable Claude runs inside the same sandbox as Codex (see claude_impl_argv).
-        if profile_path is None:
-            failures.append(f"{runtime} run has no sandbox profile")
-        else:
-            failures += probe_sandbox(profile_path, root, REPO / INSTRUCTIONS_FILE)
-            if implement:
-                failures += probe_test_python(profile_path, root)
+        prefix = sandbox_prefix(root)
+        if argv is None or argv[:len(prefix)] != prefix:
+            failures.append(f"{runtime} argv is not wrapped in this run's {SANDBOX} sandbox")
+        failures += probe_sandbox(root, REPO / INSTRUCTIONS_FILE)
+        if implement:
+            failures += probe_test_python(root)
         if implement and runtime == "claude" and argv is not None:
-            if argv[:2] != ["/usr/bin/sandbox-exec", "-f"]:
-                failures.append("write-capable claude is not wrapped in sandbox-exec")
             if "--tools" not in argv or argv[argv.index("--tools") + 1] != IMPL_TOOLS:
                 failures.append(f"claude tools are not exactly {IMPL_TOOLS}")
             if "--strict-mcp-config" not in argv:
@@ -614,9 +714,10 @@ def claude_argv(model, effort, append_file=None, resume=None, tools=CLAUDE_TOOLS
     return argv
 
 
-def codex_argv(model, effort, profile_path, cwd, resume=None, schema_path=None, out_path=None,
+def codex_argv(model, effort, root, cwd, resume=None, schema_path=None, out_path=None,
                sandbox="danger-full-access"):
-    argv = ["/usr/bin/sandbox-exec", "-f", str(profile_path), CODEX_BIN, "exec"]
+    """Codex inside the sandbox of run root `root`; its own sandbox mode is set by `sandbox`."""
+    argv = [CODEX_BIN, "exec"]
     if resume:
         argv += ["resume", resume]
     argv += ["--model", model, "-c", f"model_reasoning_effort={json.dumps(effort)}",
@@ -627,7 +728,7 @@ def codex_argv(model, effort, profile_path, cwd, resume=None, schema_path=None, 
         argv += ["--sandbox", sandbox, "-C", str(cwd)]
     if schema_path:
         argv += ["--output-schema", str(schema_path), "-o", str(out_path)]
-    return argv + ["-"]
+    return sandboxed(root, argv + ["-"])
 
 
 def run_process(argv, prompt, cwd, env, timeout, stdout_path, stderr_path):
@@ -846,7 +947,7 @@ def run_candidate_stage(ctx, stage, prompt, resume=None):
     stdout_path, stderr_path = out / f"{stage}.stdout.jsonl", out / f"{stage}.stderr.txt"
     if cand["runtime"] == "claude":
         if ctx.get("implement"):
-            argv, env = claude_impl_argv(cand["model"], effort, ctx["profile"]), impl_env(root, ctx["key"], cand)
+            argv, env = claude_impl_argv(cand["model"], effort, root), impl_env(root, ctx["key"], cand)
         else:
             argv = claude_argv(cand["model"], effort, append_file=instructions(wt), resume=resume)
             env = claude_env(cand["client"], ctx["key"])
@@ -857,7 +958,7 @@ def run_candidate_stage(ctx, stage, prompt, resume=None):
                 "is_error": result.get("is_error"), "terminal_reason": result.get("terminal_reason"),
                 "final": result.get("result") or "", "session_id": result.get("session_id") or init.get("session_id")
                 }, result.get("session_id") or init.get("session_id")
-    argv = codex_argv(cand["model"], effort, ctx["profile"], wt, resume=resume)
+    argv = codex_argv(cand["model"], effort, root, wt, resume=resume)
     env = impl_env(root, ctx["key"], cand) if ctx.get("implement") else codex_env(root, root / "codex-home", ctx["key"])
     proc = run_process(argv, prompt, wt, env, ctx["timeout"], stdout_path, stderr_path)
     rows = read_jsonl(stdout_path)
@@ -872,7 +973,7 @@ def run_reviewer(ctx, case_prompt, draft):
     home = root / "reviewer-codex-home"
     write_codex_home(home, rev.get("client", "gateway"))
     prompt = T["reviewer.prompt"].format(task=case_prompt, draft=draft)
-    argv = codex_argv(rev["model"], rev["effort"], ctx["profile"], root / "wt")
+    argv = codex_argv(rev["model"], rev["effort"], root, root / "wt")
     env = codex_env(root, home, ctx["key"])
     proc = run_process(argv, prompt, root / "wt", env, ctx["timeout"],
                        out / "review.stdout.jsonl", out / "review.stderr.txt")
@@ -966,24 +1067,23 @@ def execute_run(run, batch, common, cases, arms, prices, key, timeout):
     prepare_snapshot(case, root)
     prompt = build_prompt(case, common, run.get("suffix")) + run.get("prompt_extra", "")
     (out / "prompt.txt").write_text(prompt, encoding="utf-8")
-    profile = root / "sandbox.sb"
-    profile.write_text(sandbox_profile(root), encoding="utf-8")
+    prepare_sandbox(root)
     if cand["runtime"] == "codex":
         write_codex_home(root / "codex-home", cand.get("client", "gateway"))
     ctx = {"cand": cand, "effort": effort, "root": root, "out": out, "key": key, "timeout": timeout,
-           "profile": profile, "reviewer": arms["reviewer"]}
+           "reviewer": arms["reviewer"]}
     markers = case.get("leak_markers", []) + common.get("leak_markers", [])
     if cand["runtime"] == "claude":
         env = claude_env(cand["client"], key)
         argv = claude_argv(cand["model"], effort, append_file=instructions(root / "wt"))
     else:
         env = codex_env(root, root / "codex-home", key)
-        argv = None
+        argv = codex_argv(cand["model"], effort, root, root / "wt")
     base = {"run_id": run["run_id"], "batch": batch, "source_run": run.get("source_run"), "case": case["id"], "snapshot": case["snapshot"],
             "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"], "runtime": cand["runtime"],
             "client": cand["client"], "effort": effort, "mode": mode, "started_at": now()}
     failures = isolation_check(root, markers, prompt, env, cand["runtime"], cand["client"],
-                               argv=argv, profile_path=profile)
+                               argv=argv)
     if failures:
         shutil.rmtree(root / "wt", ignore_errors=True)
         return {**base, "status": "invalid", "reasons": ["isolation: " + f for f in failures],
@@ -1248,17 +1348,16 @@ def cmd_check_isolation(args):
     case = cases[args.case]
     root = SCRATCH_ROOT / "_isolation" / args.case
     prepare_snapshot(case, root)
-    profile = root / "sandbox.sb"
-    profile.write_text(sandbox_profile(root), encoding="utf-8")
+    prepare_sandbox(root)
     markers = case.get("leak_markers", []) + common.get("leak_markers", [])
     if args.plant:
         (root / "home" / "notes.md").write_text(f"answer: {markers[0]}\n", encoding="utf-8")
     prompt = build_prompt(case, common)
     env = codex_env(root, root / "codex-home", "placeholder")
-    failures = isolation_check(root, markers, prompt, env, "codex", "gateway", profile_path=profile,
-                               implement=is_impl(case))
-    print(json.dumps({"case": args.case, "planted": args.plant, "pass": not failures, "failures": failures},
-                     ensure_ascii=False, indent=1))
+    argv = codex_argv("check-isolation", "none", root, root / "wt")
+    failures = isolation_check(root, markers, prompt, env, "codex", "gateway", argv=argv, implement=is_impl(case))
+    print(json.dumps({"case": args.case, "planted": args.plant, "host": HOST, "sandbox": SANDBOX,
+                      "pass": not failures, "failures": failures}, ensure_ascii=False, indent=1))
     return 0 if not failures else 1
 
 
@@ -1275,15 +1374,16 @@ def impl_cfg():
     return impl
 
 
-def claude_impl_argv(model, effort, profile):
-    """Write-capable Claude: the whole CLI runs inside the run's sandbox profile.
+def claude_impl_argv(model, effort, root):
+    """Write-capable Claude: the whole CLI runs inside the sandbox of run root `root`.
 
     Tool permissions are skipped because the sandbox, not the prompt, is the boundary:
     reads and writes outside the run directory fail at the kernel.
     """
-    return ["/usr/bin/sandbox-exec", "-f", str(profile), str(CLAUDE_BIN), "-p", "--model", model,
-            "--effort", effort, "--tools", IMPL_TOOLS, "--dangerously-skip-permissions",
-            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--output-format", "stream-json", "--verbose"]
+    return sandboxed(root, [str(CLAUDE_BIN), "-p", "--model", model,
+                            "--effort", effort, "--tools", IMPL_TOOLS, "--dangerously-skip-permissions",
+                            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--output-format",
+                            "stream-json", "--verbose"])
 
 
 def impl_env(root, key, cand):
@@ -1391,7 +1491,7 @@ def parse_junit(path, expected):
             "junit": True}
 
 
-def run_hidden_tests(case, root, profile, out, timeout):
+def run_hidden_tests(case, root, out, timeout):
     """Place the fix's tests over the candidate's tree and run them in the sandbox.
 
     A file the candidate wrote at the same path is replaced: the hidden version is the
@@ -1406,8 +1506,8 @@ def run_hidden_tests(case, root, profile, out, timeout):
         shutil.copyfile(case["dir"] / f["file"], target)
     junit = Path(root) / "tmp" / "hidden-junit.xml"
     junit.unlink(missing_ok=True)
-    argv = ["/usr/bin/sandbox-exec", "-f", str(profile), TEST_PYTHON, "-m", "pytest", *ht["paths"],
-            "-q", "-p", "no:cacheprovider", "--continue-on-collection-errors", f"--junitxml={junit}"]
+    argv = sandboxed(root, [TEST_PYTHON, "-m", "pytest", *ht["paths"], "-q", "-p", "no:cacheprovider",
+                            "--continue-on-collection-errors", f"--junitxml={junit}"])
     env = {"PATH": "/usr/bin:/bin", "HOME": str(Path(root) / "home"), "TMPDIR": str(Path(root) / "tmp"),
            "LANG": "en_US.UTF-8", "PYTHONPATH": str(wt), "PYTHONDONTWRITEBYTECODE": "1"}
     proc = run_process(argv, "", wt, env, timeout, out / "hidden-tests.stdout.txt", out / "hidden-tests.stderr.txt")
@@ -1446,15 +1546,15 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
     (root / "claude-config").mkdir()
     base_sha = subprocess.run(["git", "-C", str(wt), "rev-parse", "HEAD"], capture_output=True, text=True,
                               check=True).stdout.strip()
-    profile = root / "sandbox.sb"
-    profile.write_text(sandbox_profile(root), encoding="utf-8")
+    prepare_sandbox(root)
     if cand["runtime"] == "codex":
         write_codex_home(root / "codex-home", cand.get("client", "gateway"))
     ctx = {"cand": cand, "effort": effort, "root": root, "out": out, "key": key, "timeout": timeout,
-           "profile": profile, "implement": True}
-    argv = claude_impl_argv(cand["model"], effort, profile) if cand["runtime"] == "claude" else None
+           "implement": True}
+    argv = (claude_impl_argv(cand["model"], effort, root) if cand["runtime"] == "claude"
+            else codex_argv(cand["model"], effort, root, wt))
     failures = isolation_check(root, markers, task_prompt, impl_env(root, key, cand), cand["runtime"], cand["client"],
-                               argv=argv, profile_path=profile, implement=True)
+                               argv=argv, implement=True)
     if failures:
         shutil.rmtree(root / "wt", ignore_errors=True)
         return {**base, "status": "invalid", "reasons": ["isolation: " + f for f in failures],
@@ -1463,7 +1563,7 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
     usage, models, efforts, steps, found = collect_usage(ctx, [sid])
     (out / "trajectory.json").write_text(json.dumps(steps, ensure_ascii=False, indent=1), encoding="utf-8")
     diff = capture_diff(wt, base_sha, out)
-    tests = run_hidden_tests(case, root, profile, out, impl.get("test_timeout", 900))
+    tests = run_hidden_tests(case, root, out, impl.get("test_timeout", 900))
     shutil.rmtree(root / "wt", ignore_errors=True)
     shutil.rmtree(root / "codex-home" / ".tmp", ignore_errors=True)
     record = {**base, "stages": [stage], "usage": usage, "usage_found": found, "actual_models": models,
@@ -1542,9 +1642,8 @@ def cmd_calibrate_tests(args):
         out.mkdir(parents=True, exist_ok=True)
         if arm == "reference":
             subprocess.run(["git", "-C", str(wt), "apply", str(case["dir"] / case["reference_patch"])], check=True)
-        profile = root / "sandbox.sb"
-        profile.write_text(sandbox_profile(root), encoding="utf-8")
-        results[arm] = run_hidden_tests(case, root, profile, out, impl_cfg().get("test_timeout", 900))
+        prepare_sandbox(root)
+        results[arm] = run_hidden_tests(case, root, out, impl_cfg().get("test_timeout", 900))
     if "baseline" in case["hidden_tests"] and results["bare"]["passed"] != case["hidden_tests"]["baseline"]:
         print(f"note: bare snapshot passed {results['bare']['passed']}, case records baseline "
               f"{case['hidden_tests']['baseline']}", file=sys.stderr)
@@ -1636,9 +1735,8 @@ def call_judge(judge, prompt, workdir, key, timeout):
     (workdir / "home").mkdir(exist_ok=True)
     schema_path, out_path = workdir / "schema.json", workdir / "verdict.json"
     schema_path.write_text(json.dumps(JUDGE_SCHEMA), encoding="utf-8")
-    profile = workdir / "sandbox.sb"
-    profile.write_text(sandbox_profile(workdir), encoding="utf-8")
-    argv = codex_argv(judge["model"], judge["effort"], profile, workdir, schema_path=schema_path,
+    prepare_sandbox(workdir)
+    argv = codex_argv(judge["model"], judge["effort"], workdir, workdir, schema_path=schema_path,
                       out_path=out_path, sandbox="read-only")
     env = codex_env(workdir, home, key)
     proc = subprocess.run(argv, input=prompt, capture_output=True, text=True, cwd=workdir, env=env, timeout=timeout)
@@ -2008,6 +2106,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--config", default=os.environ.get("AGENT_EVAL_CONFIG", "agent-eval/config.json"),
                     help="eval config (default: $AGENT_EVAL_CONFIG or agent-eval/config.json)")
+    ap.add_argument("--host", help="apply this `hosts` entry of the config (default: the one named like this machine)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     csv = lambda s: [x for x in s.split(",") if x]  # noqa: E731
 
@@ -2080,7 +2179,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         if args.cmd != "text" or Path(args.config).exists():
-            configure(args.config)
+            configure(args.config, args.host)
         return args.func(args)
     except EvalError as exc:
         print(f"error: {exc}", file=sys.stderr)
