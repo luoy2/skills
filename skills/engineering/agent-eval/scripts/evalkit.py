@@ -527,14 +527,14 @@ def bwrap_prefix(root):
     root = os.path.realpath(root)
     argv = [BWRAP, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"]
     denied = []
-    for d in sorted({os.path.realpath(d) for d in DENY_ROOTS}, key=len):
+    for d in sorted({os.path.realpath(d) for d in DENY_ROOTS}, key=lambda p: (len(p), p)):
         if not os.path.lexists(d) or under(d, denied):
             continue
         argv += ["--tmpfs", d] if os.path.isdir(d) else ["--ro-bind", "/dev/null", d]
         denied.append(d)
     resolver = os.path.dirname(os.path.realpath("/etc/resolv.conf"))
     bound = []
-    for p in sorted({*ALLOW_READ, resolver}, key=len):
+    for p in sorted({*ALLOW_READ, resolver}, key=lambda p: (len(p), p)):
         if not os.path.lexists(p) or not under(p, denied) or under(p, bound):
             continue
         argv += ["--symlink", os.readlink(p), p] if os.path.islink(p) else ["--ro-bind", p, p]
