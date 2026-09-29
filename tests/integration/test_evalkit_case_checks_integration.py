@@ -88,3 +88,80 @@ def test_lint_case_exits_one_on_an_error_and_zero_once_disclosed(kit, snapshot_c
                              "and `as_row()`")
     snapshot_case.write_text(json.dumps(case), encoding="utf-8")
     assert kit.cmd_lint_case(args) == 0
+
+
+def _patch_adding(name):
+    return (f"diff --git a/{name} b/{name}\nnew file mode 100644\n--- /dev/null\n+++ b/{name}\n@@ -0,0 +1 @@\n+x\n")
+
+
+@pytest.fixture
+def calibration_case(kit, tmp_path, monkeypatch):
+    """A case whose tests read which patch was applied from marker files in the tree."""
+    cases = tmp_path / "cases"
+    (cases / "W").mkdir(parents=True)
+    (cases / "common.json").write_text(json.dumps({"rubric": [], "implement_suffix": "go"}), encoding="utf-8")
+    (cases / "W" / "reference.patch").write_text(_patch_adding("REF"), encoding="utf-8")
+    (cases / "W" / "alt.patch").write_text(_patch_adding("ALT"), encoding="utf-8")
+    case = {"id": "W", "kind": "implement", "title": "t", "snapshot": "0" * 40, "background": ["b"],
+            "owner_messages": ["m"], "reference_patch": "reference.patch",
+            "hidden_tests": {"files": [], "paths": ["tests"], "expected": 3, "reference_only": ["t::design"]},
+            "trap": {"description": "d", "direction": "dir", "pass": [{"text": "p", "checked_by": []}]}, "rubric": []}
+
+    def write(**fields):
+        (cases / "W" / "case.json").write_text(json.dumps({**case, **fields}), encoding="utf-8")
+
+    def fake_snapshot(case, root):
+        wt = root / "wt"
+        if root.exists():
+            import shutil
+            shutil.rmtree(root)
+        for sub in ("wt", "home", "tmp"):
+            (root / sub).mkdir(parents=True)
+        (wt / "a.py").write_text("x = 1\n", encoding="utf-8")
+        _git(wt, "init", "-q")
+        _git(wt, "add", "-A")
+        _git(wt, "commit", "-qm", "snapshot")
+        return wt
+
+    def fake_tests(case, root, out, timeout):
+        wt = Path(root) / "wt"
+        ref, alt = (wt / "REF").exists(), (wt / "ALT").exists()
+        outcomes = {"t::behaviour": "passed" if ref or alt else "failed", "t::design": "passed" if ref else "failed",
+                    "t::wording": "passed" if ref else "failed"}
+        passed = sum(v == "passed" for k, v in outcomes.items() if k != "t::design")
+        return {"passed": passed, "scored_expected": 2, "expected": 3, "reference_only_passed": int(ref),
+                "cases": outcomes, "junit": True}
+
+    monkeypatch.setattr(kit, "CASES", cases)
+    monkeypatch.setattr(kit, "RESULTS", tmp_path / "results")
+    monkeypatch.setattr(kit, "SCRATCH_ROOT", tmp_path / "scratch")
+    monkeypatch.setattr(kit, "CFG", {"implement": {"test_timeout": 5}})
+    monkeypatch.setattr(kit, "prepare_snapshot", fake_snapshot)
+    monkeypatch.setattr(kit, "prepare_sandbox", lambda root: None)
+    monkeypatch.setattr(kit, "run_hidden_tests", fake_tests)
+    monkeypatch.setattr(kit, "lint_case", lambda case, common: {"case": "W", "errors": [], "warnings": [], "docstrings": []})
+    return write
+
+
+def _tests_record(kit):
+    _, cases = kit.load_cases(["W"])
+    return kit.read_calibration("tests", "W", kit.case_digest(cases["W"]))
+
+
+def test_calibrate_tests_fails_a_case_without_an_alternative_implementation(kit, calibration_case):
+    calibration_case()
+    assert kit.cmd_calibrate_tests(type("Args", (), {"case": "W"})()) == 1
+    rec = _tests_record(kit)
+    assert rec["ok"] is False and any("no alt_patches" in p for p in rec["problems"])
+    assert rec["reference"]["passed"] == 2 and rec["reference"]["reference_only_passed"] == 1
+
+
+def test_calibrate_tests_names_what_an_alternative_fails_until_the_case_excuses_it(kit, calibration_case):
+    calibration_case(alt_patches=[{"file": "alt.patch", "note": "the astra plan", "accepted_failures": {}}])
+    assert kit.cmd_calibrate_tests(type("Args", (), {"case": "W"})()) == 1
+    (alt,) = _tests_record(kit)["alts"]
+    assert alt["unexcused_failures"] == ["t::wording"]
+    calibration_case(alt_patches=[{"file": "alt.patch", "note": "the astra plan",
+                                   "accepted_failures": {"t::wording": "drops the strike from the message"}}])
+    assert kit.cmd_calibrate_tests(type("Args", (), {"case": "W"})()) == 0
+    assert _tests_record(kit)["ok"] is True

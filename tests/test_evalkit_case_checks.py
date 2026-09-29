@@ -350,3 +350,36 @@ def test_trap_wording_and_wrong_markers_are_flagged_for_planning_cases_too(kit, 
         ("direction", "trap.direction"), ("wrong_marker", "plan.md:2"), ("wrong_marker", "background:2")]
     case["trap"]["wrong_markers"] = ["("]
     assert _values(kit.lint_case(case, {"suffix": "s"}), "errors", "bad_regex") == ["("]
+
+
+# ------------------------------------------------ scoring denominators and alternatives
+
+JUNIT = """<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest">
+<testcase classname="tests.test_a" name="test_ok"/>
+<testcase classname="tests.test_a" name="test_design[x]"/>
+<testcase classname="tests.test_a" name="test_design[y]"><failure message="x"/></testcase>
+<testcase classname="tests.test_a" name="test_bad"><failure message="x"/></testcase>
+<testcase classname="" name="tests.test_b"><error message="collection failure"/></testcase>
+</testsuite></testsuites>"""
+
+
+def test_reference_only_tests_run_but_leave_the_score_and_its_denominator(kit, tmp_path):
+    """A test encoding the real fix's own design would otherwise cap every candidate below the reference."""
+    path = tmp_path / "junit.xml"
+    path.write_text(JUNIT, encoding="utf-8")
+    got = kit.parse_junit(path, 10, ["tests.test_a::test_design[x]", "tests.test_a::test_design[y]"])
+    assert (got["passed"], got["failed"], got["errors"], got["scored_expected"]) == (1, 1, 1, 8)
+    assert got["reference_only_passed"] == 1 and got["pass_rate"] == 0.125
+    assert got["cases"] == {"tests.test_a::test_ok": "passed", "tests.test_a::test_design[x]": "passed",
+                            "tests.test_a::test_design[y]": "failed", "tests.test_a::test_bad": "failed",
+                            "tests.test_b": "error"}
+    plain = kit.parse_junit(path, 10)
+    assert (plain["passed"], plain["scored_expected"], plain["pass_rate"]) == (2, 10, 0.2)
+
+
+def test_an_alternative_may_fail_only_reference_only_or_accepted_tests(kit):
+    """W's tests failed a reasonable plan's implementation for its design, not for a defect."""
+    reference = {"t::a": "passed", "t::b": "passed", "t::c": "passed", "t::d": "passed", "t::e": "failed"}
+    alt = {"t::a": "passed", "t::b": "failed", "t::c": "error", "t::e": "failed"}
+    assert kit.alt_failures(reference, alt) == ["t::b", "t::c", "t::d"]
+    assert kit.alt_failures(reference, alt, ["t::b"], {"t::c": "patch drops the error code"}) == ["t::d"]

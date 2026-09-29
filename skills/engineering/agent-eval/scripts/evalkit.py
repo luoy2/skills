@@ -1565,20 +1565,37 @@ def capture_diff(wt, base, out):
     return stat
 
 
-def parse_junit(path, expected):
+def parse_junit(path, expected, reference_only=()):
+    """Counts and per-test outcomes of a hidden-test run; reference-only tests are not scored.
+
+    A test id is junit's `classname::name` (a collection error reports the module alone).
+    `hidden_tests.reference_only` lists tests that encode the real fix's own design: they run
+    and are reported as `reference_only_passed`, but `passed`, the other counts and
+    `scored_expected` leave them out.
+    """
     import xml.etree.ElementTree as ET
     counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
+    reference_only = set(reference_only)
+    scored_expected = expected - len(reference_only)
+    base = {"expected": expected, "scored_expected": scored_expected, "reference_only_passed": 0}
     try:
         tree = ET.parse(path)
     except (FileNotFoundError, ET.ParseError):
-        return {**counts, "expected": expected, "pass_rate": 0.0, "junit": False}
+        return {**counts, **base, "pass_rate": 0.0, "junit": False, "cases": {}}
+    outcomes, reference_passed = {}, 0
     for tc in tree.iter("testcase"):
         tags = {child.tag for child in tc}
         key = ("failed" if "failure" in tags else "errors" if "error" in tags
                else "skipped" if "skipped" in tags else "passed")
+        test_id = f"{tc.get('classname')}::{tc.get('name')}" if tc.get("classname") else tc.get("name")
+        outcomes[test_id] = {"errors": "error"}.get(key, key)
+        if test_id in reference_only:
+            reference_passed += key == "passed"
+            continue
         counts[key] += 1
-    return {**counts, "expected": expected, "pass_rate": round(counts["passed"] / expected, 4) if expected else None,
-            "junit": True}
+    return {**counts, **base, "reference_only_passed": reference_passed,
+            "pass_rate": round(counts["passed"] / scored_expected, 4) if scored_expected else None,
+            "junit": True, "cases": outcomes}
 
 
 def run_hidden_tests(case, root, out, timeout):
@@ -1604,7 +1621,7 @@ def run_hidden_tests(case, root, out, timeout):
     if junit.exists():
         shutil.copyfile(junit, out / "hidden-junit.xml")
     return {"returncode": proc["returncode"], "elapsed_s": proc["elapsed_s"], "timed_out": proc["timed_out"],
-            **parse_junit(junit, ht["expected"])}
+            **parse_junit(junit, ht["expected"], ht.get("reference_only", []))}
 
 
 def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plans):
@@ -1718,35 +1735,83 @@ def cmd_run_impl(args, common, cases):
     return 0
 
 
+def alt_failures(reference_cases, alt_cases, reference_only=(), accepted=()):
+    """Tests the reference passes and an alternative implementation does not, less the excused ones.
+
+    An alternative is a reasonable implementation that follows another plan. A test it fails
+    must be reference-only (it encodes the real fix's own design) or an accepted genuine defect
+    of that patch; anything else is a test that punishes a reasonable choice.
+    """
+    excused = set(reference_only) | set(accepted)
+    return sorted(t for t, outcome in reference_cases.items()
+                  if outcome == "passed" and alt_cases.get(t) != "passed" and t not in excused)
+
+
 def cmd_calibrate_tests(args):
-    """Hidden tests must fail on the bare snapshot and pass in full once the real fix is applied."""
+    """Hidden tests fail on the bare snapshot, pass in full with the real fix, and fail an
+    alternative implementation only where the case says why; the lint must show no error."""
     common, cases = load_cases([args.case])
     case = cases[args.case]
     if not is_impl(case):
         raise EvalError(f"{args.case} is not an implementation case")
     lint = lint_case(case, common)
     print_lint(lint)
+    ht = case["hidden_tests"]
+    reference_only = ht.get("reference_only", [])
+    alts = case.get("alt_patches") or []
     root = SCRATCH_ROOT / "_calibrate_tests" / args.case
     out = root / "out"
-    results = {}
-    for arm in ("bare", "reference"):
+    results, problems = {"alts": []}, []
+    arms = [("bare", None), ("reference", case["reference_patch"])] + [("alt", a) for a in alts]
+    for arm, patch in arms:
         wt = prepare_snapshot(case, root)
         out.mkdir(parents=True, exist_ok=True)
         if arm == "reference":
-            subprocess.run(["git", "-C", str(wt), "apply", str(case["dir"] / case["reference_patch"])], check=True)
+            subprocess.run(["git", "-C", str(wt), "apply", str(case["dir"] / patch)], check=True)
+        elif arm == "alt":
+            applied = subprocess.run(["git", "-C", str(wt), "apply", str(case["dir"] / patch["file"])],
+                                     capture_output=True, text=True)
+            if applied.returncode != 0:
+                results["alts"].append({"file": patch["file"], "applied": False, "error": applied.stderr[-300:]})
+                problems.append(f"alt patch {patch['file']} does not apply")
+                continue
         prepare_sandbox(root)
-        results[arm] = run_hidden_tests(case, root, out, impl_cfg().get("test_timeout", 900))
-    if "baseline" in case["hidden_tests"] and results["bare"]["passed"] != case["hidden_tests"]["baseline"]:
+        got = run_hidden_tests(case, root, out, impl_cfg().get("test_timeout", 900))
+        if arm != "alt":
+            results[arm] = got
+            continue
+        accepted = patch.get("accepted_failures") or {}
+        unexcused = alt_failures(results["reference"]["cases"], got["cases"], reference_only, accepted)
+        results["alts"].append({"file": patch["file"], "note": patch.get("note", ""), "applied": True,
+                                "passed": got["passed"], "scored_expected": got["scored_expected"],
+                                "unexcused_failures": unexcused, "cases": got["cases"],
+                                "accepted_but_passed": sorted(t for t in accepted if got["cases"].get(t) == "passed")})
+        if unexcused:
+            problems.append(f"alt patch {patch['file']} fails {len(unexcused)} tests the case does not excuse: "
+                            + ", ".join(unexcused[:5]) + (", …" if len(unexcused) > 5 else ""))
+    if "baseline" in ht and results["bare"]["passed"] != ht["baseline"]:
         print(f"note: bare snapshot passed {results['bare']['passed']}, case records baseline "
-              f"{case['hidden_tests']['baseline']}", file=sys.stderr)
-    ok = (results["bare"]["passed"] < case["hidden_tests"]["expected"]
-          and results["reference"]["passed"] == case["hidden_tests"]["expected"]
-          and not lint["errors"])
+              f"{ht['baseline']}", file=sys.stderr)
+    ref = results["reference"]
+    if results["bare"]["passed"] >= ref["scored_expected"]:
+        problems.append("the bare snapshot already passes every scored test")
+    if ref["passed"] != ref["scored_expected"] or ref["reference_only_passed"] != len(reference_only):
+        problems.append(f"the reference passes {ref['passed']}/{ref['scored_expected']} scored and "
+                        f"{ref['reference_only_passed']}/{len(reference_only)} reference-only tests")
+    if not alts:
+        problems.append("no alt_patches: at least one alternative implementation must show the tests accept "
+                        "another reasonable design")
+    if lint["errors"]:
+        problems.append(f"lint-case: {len(lint['errors'])} errors")
+    ok = not problems
     shutil.rmtree(root, ignore_errors=True)
     digest = case_digest(case)
-    results["lint"] = lint
+    results.update(lint=lint, problems=problems)
     write_calibration("tests", args.case, digest, {"ok": ok, **results})
-    print(json.dumps({"case": args.case, "case_digest": digest, "pass": ok, **results}, ensure_ascii=False, indent=1))
+    brief = {k: ({kk: vv for kk, vv in v.items() if kk != "cases"} if isinstance(v, dict) and k != "lint" else v)
+             for k, v in results.items() if k != "lint"}
+    brief["alts"] = [{k: v for k, v in a.items() if k != "cases"} for a in results["alts"]]
+    print(json.dumps({"case": args.case, "case_digest": digest, "pass": ok, **brief}, ensure_ascii=False, indent=1))
     return 0 if ok else 1
 
 
