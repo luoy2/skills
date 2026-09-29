@@ -2647,8 +2647,13 @@ def spend(rows):
             + sum(r.get("cost_usd") or 0 for r in rows if r.get("plan_run")) + sum(plans.values()))
 
 
-def case_order(cases):
-    """Ranking cases first, then baseline cases, which check an approved plan can be finished."""
+def case_order(cases, rows):
+    """Ranking cases first, then baseline cases, which check an approved plan can be finished.
+
+    Only cases this batch ran: a planning batch shows no empty implementation tables.
+    """
+    ran = {r["case"] for r in rows}
+    cases = {k: c for k, c in cases.items() if k in ran}
     ranking = [(k, c) for k, c in cases.items() if c.get("role", "ranking") != "baseline"]
     return ranking, [(k, c) for k, c in cases.items() if c.get("role", "ranking") == "baseline"]
 
@@ -2689,7 +2694,7 @@ def render_markdown(batch, rows, cases, arms, common=None):
                                           for (h, sb), n in sorted(machines.items()))
         out += [T["report.md_hosts"].format(hosts=hosts), ""]
     disputes = []
-    ranking, baseline = case_order(cases)
+    ranking, baseline = case_order(cases, rows)
     for section, level in ((ranking, "###"), (baseline, "####")):
         shown = [(k, c) for k, c in section if any(r["case"] == k for r in valid)
                  or (is_impl(c) and timed_out_groups(k, rows))]
@@ -2829,7 +2834,7 @@ def render_report(batch, rows, cases, arms, common=None):
     effort_order = ["medium", "high", "xhigh", "max", "ultra"]
     body = []
     disputes = []
-    ranking, baseline = case_order(cases)
+    ranking, baseline = case_order(cases, rows)
     for section, level in ((ranking, "h2"), (baseline, "h3")):
         if section is baseline and section:
             body.append(f"<h2>{T['report.baseline_heading']}</h2><p class='lede'>{T['report.baseline_note']}</p>")

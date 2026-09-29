@@ -448,6 +448,16 @@ def test_the_archived_report_keeps_timed_out_runs_their_disputes_and_what_invali
     assert "timed out 2/2" in page and "diff line 779 clears req_id" in page and "Baseline cases" in page
 
 
+def test_a_batch_that_ran_no_implementation_case_shows_no_empty_implementation_table(kit, monkeypatch, tmp_path):
+    """A planning batch rendered empty Q/W tables (owner's screenshot, sonnet55-20260928)."""
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    rows = [_impl_row("Q-sol-high-given-plan-r1", 3, _outcomes({"t::a", "t::b", "t::c"}))]
+    other = {**Q_CASE, "id": "W", "title": "unrun implementation case"}
+    md = kit.render_markdown("b", rows, {"Q": Q_CASE, "W": other}, {"judges": []})
+    page = kit.render_report("b", rows, {"Q": Q_CASE, "W": other}, {"judges": []})
+    assert "unrun implementation case" not in md and "unrun implementation case" not in page
+    assert "#### Q · liveness" in md
+
 def test_an_implementer_timeout_follows_its_effort_unless_given(kit):
     impl = {"timeouts": {"max": 7200}}
     assert kit.impl_timeout(impl, "max") == 7200
