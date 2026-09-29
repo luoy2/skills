@@ -11,7 +11,7 @@
 //                 "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/decision-check.mjs",
 //                          "docs/owner-decisions.md"] }] }
 //
-// The first questionnaire a session sends is denied, and the reason handed back to
+// Each questionnaire is denied once at first, and the reason handed back to
 // the model is the checklist in full, so the stem and the recommended options are
 // checked before the owner sees them. The model's retry from the same session
 // within RETRY_WINDOW_MS goes through and clears the marker; the next questionnaire

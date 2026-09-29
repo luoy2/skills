@@ -27,7 +27,7 @@ The state is small: the current main line, and a queue of parked items.
   line. It is visible only on this machine; say so once when you create it.
 
 The store holds open work only. A parked item leaves it once it is handled
-(rule 7), so the store stays small however long the work runs.
+(rule 8), so the store stays small however long the work runs.
 
 A main line has a title, a done-when criterion (a link to the plan, issue or
 milestone that defines it), and the next step. If none is set, ask the owner
