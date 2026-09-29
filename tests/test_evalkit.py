@@ -131,6 +131,16 @@ def test_a_batch_judged_before_the_two_level_trap_shows_no_direction(kit):
     assert kit._verdict(per) == (None, False)
 
 
+def test_the_archived_report_lists_a_plan_run_whose_judges_split_on_direction(kit):
+    """A split on either level is a dispute, in plan cases as in implementation cases."""
+    case = {"id": "P", "title": "t", "kind": "plan"}
+    split = {"j1": {"trap": True, "direction": True, "items": {}},
+             "j2": {"trap": True, "direction": False, "items": {}}}
+    rows = [_row("P-sol-high-solo", "P", mode="solo", scores={"final": split})]
+    md = kit.render_markdown("b", rows, {"P": case}, {"judges": []})
+    assert "P-sol-high-solo draft: trap" in md
+
+
 def test_planning_repeats_name_each_run_and_leave_single_runs_unchanged(kit):
     cases = {"I": {"id": "I"}}
     arms = {"candidates": [{"id": "astra", "efforts": ["xhigh"]}], "modes": ["solo"]}

@@ -1878,7 +1878,7 @@ def render_markdown(batch, rows, cases, arms):
                     d, t = _verdict(per)
                     _, agreed, _ = agreement(per) if per else (None, None, [])
                     cells += [f"{mark[d]}/{mark[t]}", f"{agreed[0]}/{agreed[1]}" if agreed else "—"]
-                    if per and t is None:
+                    if per and (d is None or t is None):
                         disputes.append(T["report.md_dispute_target_trap"].format(run=r["run_id"], target=target))
                 if r["mode"] != "review":
                     cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
