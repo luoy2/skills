@@ -316,21 +316,83 @@ def test_a_hand_edit_of_the_view_is_reconciled_by_the_next_command(cli, home):
     assert "reconciled" not in cli("list")[1]  # taken in once
 
 
-def test_a_stale_whole_file_write_neither_duplicates_nor_reopens(cli, home):
-    """An old-skill session read the Markdown before the import and writes it back whole, minus the line it handled."""
+def test_a_pre_import_copy_written_back_closes_nothing_and_duplicates_nothing(cli, home):
+    """An old-skill session read the Markdown before the import and writes it back whole, minus the line it
+    handled. The copy has no store revision, so the store cannot tell a removal from a line it never showed."""
     view = home / "t.md"
     view.write_text(LEGACY, encoding="utf-8")
     assert cli("import-md", view)[0] == 0
     assert cli("done", "P2", "--kind", "ticket", "--ref", "#440", "--expected-version", 1, "--request-id", "d")[0] == 0
-    view.write_text(LEGACY.replace(f"- {LEGACY_PARKED[0]}\n", ""), encoding="utf-8")
+    copy = LEGACY.replace(f"- {LEGACY_PARKED[0]}\n", "") + "- a line the old session added\n"
+    view.write_text(copy, encoding="utf-8")
     code, listed = cli("list")
     assert code == 0
-    assert listed["reconciled"]["closed"] == ["P1"]
-    assert listed["reconciled"]["ignored"] == ["P2: done; a closed item is never reopened"]
-    assert "parked" not in listed["reconciled"] and "edited" not in listed["reconciled"]
-    assert [i["ref"] for i in listed["items"]] == ["P3", "P4", "P5", "P6", "P7"]
-    assert cli("show", "P1")[1]["item"]["receipt"]["kind"] == "legacy-hand-removed"
+    reconciled = listed["reconciled"]
+    assert reconciled["parked"] == ["P8"] and "closed" not in reconciled and "main" not in reconciled
+    assert reconciled["ignored"] == ["P2: done; a closed item is never reopened"]
+    assert Path(reconciled["no_revision"]).read_text(encoding="utf-8") == copy
+    assert [i["ref"] for i in listed["items"]] == ["P1", "P3", "P4", "P5", "P6", "P7", "P8"]
     assert cli("show", "P2")[1]["item"]["receipt"] == {"kind": "ticket", "ref": "#440"}
+
+
+def _rendered_copy(cli, home):
+    """The view as a session reads it now: its header carries the store revision it was rendered at."""
+    assert cli("render")[0] == 0
+    return (home / "t.md").read_text(encoding="utf-8")
+
+
+def test_a_copy_written_back_keeps_items_parked_after_it(cli, home):
+    park(cli, "old one", "r1")
+    park(cli, "old two", "r2")
+    copy = _rendered_copy(cli, home)
+    newer = park(cli, "parked after the copy was read", "r3")
+    (home / "t.md").write_text("\n".join(l for l in copy.splitlines() if not l.startswith("- P1 ·")) + "\n",
+                               encoding="utf-8")
+    code, listed = cli("list")
+    assert code == 0 and listed["reconciled"] == {"closed": ["P1"]}
+    assert [i["ref"] for i in listed["items"]] == ["P2", newer["ref"]]
+
+
+def test_a_stale_line_for_an_item_changed_after_the_copy_changes_nothing(cli, home):
+    park(cli, "one", "r1", "--source", "s1")
+    copy = _rendered_copy(cli, home)
+    assert cli("add-source", "P1", "--source", "s2", "--expected-version", 1, "--request-id", "a")[0] == 0
+    (home / "t.md").write_text(copy + "- a new line\n", encoding="utf-8")
+    code, listed = cli("list")
+    reconciled = listed["reconciled"]
+    assert code == 0 and reconciled["stale"] == ["P1"] and reconciled["parked"] == ["P2"]
+    assert "edited" not in reconciled and "closed" not in reconciled
+    assert Path(reconciled["set_aside"]).read_text(encoding="utf-8") == copy + "- a new line\n"
+    p1 = cli("show", "P1")[1]["item"]
+    assert (p1["source_refs"], p1["version"]) == (["s1", "s2"], 2)
+
+
+def test_an_edited_main_line_from_before_a_later_main_set_is_set_aside(cli, home):
+    assert cli("main", "set", "--title", "M-3a", "--next-step", "first", "--expected-version", 0,
+               "--request-id", "m1")[0] == 0
+    copy = _rendered_copy(cli, home)
+    assert cli("main", "set", "--next-step", "second", "--expected-version", 1, "--request-id", "m2")[0] == 0
+    edited = copy.replace("- next step: first", "- next step: first, edited by hand")
+    (home / "t.md").write_text(edited, encoding="utf-8")
+    code, listed = cli("list")
+    assert code == 0 and "main" not in listed["reconciled"]
+    assert Path(listed["reconciled"]["main_conflict"]).read_text(encoding="utf-8") == edited
+    assert Path(listed["reconciled"]["main_conflict"]).name.startswith("t.md.stale-")
+    main = cli("main", "get")[1]["main"]
+    assert (main["title"], main["next_step"], main["version"]) == ("M-3a", "second", 2)
+
+
+def test_a_view_without_its_header_closes_nothing(cli, home):
+    for n in (1, 2):
+        park(cli, f"item {n}", f"r{n}")
+    lines = _rendered_copy(cli, home).splitlines()[1:]  # rewritten from scratch: no generated header
+    (home / "t.md").write_text("\n".join(l for l in lines if not l.startswith("- P1 ·")) + "\n- added\n",
+                               encoding="utf-8")
+    code, listed = cli("list")
+    reconciled = listed["reconciled"]
+    assert code == 0 and "closed" not in reconciled and reconciled["parked"] == ["P3"]
+    assert Path(reconciled["no_revision"]).exists()
+    assert [i["ref"] for i in listed["items"]] == ["P1", "P2", "P3"]
 
 
 def test_a_view_without_its_parked_section_is_set_aside_not_emptied(cli, home):
