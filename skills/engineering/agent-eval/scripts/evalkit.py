@@ -137,6 +137,8 @@ TEXT_EN = {
         "judging cost ${judge_cost:.2f}. Trap is shown as direction/pass: ✓ both judges pass, ✗ both fail, ? they disagree or "
         "did not judge; rubric is the number of items both judges pass / total."),
     "report.md_overlay": "Snapshot code unchanged; these instruction files were replaced by the overlay_dir versions: {files}.",
+    "report.md_hosts": "Valid runs come from more than one machine, whose CLIs may differ: {hosts}. Each row's host and sandbox are in runs.jsonl.",
+    "report.md_host_item": "{host} ({sandbox}) {runs}",
     "report.list_sep": ", ",
     "report.md_hidden": "{expected} hidden tests; the bare snapshot passes {baseline}.",
     "report.impl_columns": ["Model", "effort", "Delivery", "Hidden tests (per run)", "Trap direction/pass", "Rubric",
@@ -1148,8 +1150,9 @@ def load_records(batch, name="runs.jsonl"):
 class RecordWriter:
     """The single writer of a batch ledger: one appended JSON line per terminal state.
 
-    Each row is stamped with the text and the kit it ran on. `recompute` rewrites rows run
-    earlier and passes stamp=False, so an old row never claims today's text.
+    Each row is stamped with the text, the kit, the host entry and the sandbox it ran on; one
+    batch may hold rows from several machines. `recompute` rewrites rows run earlier and passes
+    stamp=False, so an old row never claims today's text or machine.
     """
 
     def __init__(self, path, stamp=True):
@@ -1160,7 +1163,7 @@ class RecordWriter:
 
     def append(self, row):
         if self.stamp:
-            row = {**row, "text_digest": TEXT_DIGEST, "kit_digest": KIT_DIGEST}
+            row = {**row, "text_digest": TEXT_DIGEST, "kit_digest": KIT_DIGEST, "host": HOST, "sandbox": SANDBOX}
         line = json.dumps(row, ensure_ascii=False) + "\n"
         with self.lock, open(self.path, "a", encoding="utf-8") as fh:
             fh.write(line)
@@ -1853,7 +1856,7 @@ def summarize(batch, cases, arms):
     for rec in records.values():
         row = {k: rec.get(k) for k in ("run_id", "case", "candidate", "model", "effort", "mode", "status",
                                         "reasons", "cost_usd", "chain_cost_usd", "elapsed_s", "kind", "rep",
-                                        "tests", "diff", "plan_run", "plan_cost_usd", "overlay")}
+                                        "tests", "diff", "plan_run", "plan_cost_usd", "overlay", "host", "sandbox")}
         row["scores"] = {}
         targets = [("final", None)] if rec.get("kind") == "implement" else judge_targets(rec)
         for target, _ in targets if rec.get("status") == "valid" else []:
@@ -1935,6 +1938,14 @@ def render_markdown(batch, rows, cases, arms):
     overlaid = sorted({f for r in valid for f in (r.get("overlay") or {})})
     if overlaid:
         out += [T["report.md_overlay"].format(files=T["report.list_sep"].join(f"`{f}`" for f in overlaid)), ""]
+    machines = {}
+    for r in valid:
+        key = (r.get("host") or T["report.none"], r.get("sandbox") or T["report.none"])
+        machines[key] = machines.get(key, 0) + 1
+    if len({host for host, _ in machines}) > 1:
+        hosts = T["report.list_sep"].join(T["report.md_host_item"].format(host=h, sandbox=sb, runs=n)
+                                          for (h, sb), n in sorted(machines.items()))
+        out += [T["report.md_hosts"].format(hosts=hosts), ""]
     disputes = []
     for case_id, case in cases.items():
         case_rows = [r for r in valid if r["case"] == case_id]

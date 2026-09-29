@@ -237,3 +237,48 @@ def test_a_host_leaves_the_text_digest_alone_and_may_not_replace_the_text(kit, t
     assert kit.TEXT_DIGEST == plain == kit.text_digest(kit.TEXT_EN)
     with pytest.raises(kit.EvalError, match="text"):
         kit.configure(_config(tmp_path, **TOP, hosts={"pisces": {"text": "zh.json"}}))
+
+
+# ------------------------------------------------------- ledger and report
+
+def test_every_stamped_ledger_row_records_its_host_and_sandbox(kit, tmp_path, monkeypatch):
+    """One batch holds rows from several machines whose CLIs differ; each row says where it ran."""
+    monkeypatch.setattr(kit, "HOST", "pisces")
+    monkeypatch.setattr(kit, "SANDBOX", "bwrap")
+    for name in kit.LEDGERS:
+        kit.RecordWriter(tmp_path / name).append({"run_id": "a"})
+        row = json.loads((tmp_path / name).read_text())
+        assert (row["host"], row["sandbox"], row["text_digest"]) == ("pisces", "bwrap", kit.TEXT_DIGEST)
+    monkeypatch.setattr(kit, "HOST", None)
+    kit.RecordWriter(tmp_path / "unnamed.jsonl").append({"run_id": "b"})
+    assert json.loads((tmp_path / "unnamed.jsonl").read_text())["host"] is None
+
+
+def test_a_recomputed_row_keeps_the_machine_it_ran_on(kit, tmp_path, monkeypatch):
+    monkeypatch.setattr(kit, "HOST", "rosetta-6")
+    monkeypatch.setattr(kit, "SANDBOX", "sandbox-exec")
+    kit.RecordWriter(tmp_path / "runs.jsonl", stamp=False).append({"run_id": "a", "host": "pisces", "sandbox": "bwrap"})
+    row = json.loads((tmp_path / "runs.jsonl").read_text())
+    assert (row["host"], row["sandbox"]) == ("pisces", "bwrap")
+
+
+def _plan_row(run_id, **kw):
+    return {"run_id": run_id, "case": "P", "candidate": "sol", "model": "gpt-6-sol", "effort": "high", "mode": "solo",
+            "status": "valid", "reasons": [], "elapsed_s": 10, "scores": {"final": {}}, **kw}
+
+
+def test_the_archived_report_names_the_hosts_only_when_a_batch_spans_several(kit, tmp_path, monkeypatch):
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    cases = {"P": {"id": "P", "title": "t", "kind": "plan"}}
+    mixed = [_plan_row("P-sol-high-solo-r1", host="rosetta-6", sandbox="sandbox-exec"),
+             _plan_row("P-sol-high-solo-r2", host="pisces", sandbox="bwrap"),
+             _plan_row("P-sol-high-solo-r3", host="pisces", sandbox="bwrap")]
+    md = kit.render_markdown("b", mixed, cases, {"judges": []})
+    assert "more than one machine" in md
+    assert "pisces (bwrap) 2" in md and "rosetta-6 (sandbox-exec) 1" in md
+    assert md.count("pisces") == 1, "a note, not a mark on every cell"
+    one = [r | {"host": "pisces", "sandbox": "bwrap"} for r in mixed]
+    assert "more than one machine" not in kit.render_markdown("b", one, cases, {"judges": []})
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "runs.jsonl").write_text(json.dumps(mixed[1]) + "\n", encoding="utf-8")
+    assert kit.summarize("b", cases, {"judges": []})[0]["host"] == "pisces"
