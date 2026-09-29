@@ -160,8 +160,11 @@ keeps one main line: a title, a done-when criterion and the next step.
   and the decisions come as one set of questions.
 
 It keeps its state in focus tools if your session has them, for example an MCP
-server shared by all your machines. Otherwise it uses one Markdown file per
-project under `~/.local/state/i-have-ocd/`. It reads no logs and sends nothing.
+server shared by all your machines. Otherwise its helper, `scripts/ocd.py`, is
+the only writer: one SQLite store per project in `~/.local/state/i-have-ocd/`,
+shared by the sessions and worktrees on that machine, where each parked item
+keeps one id and closes only with a receipt. `<project>.md` beside it is a
+generated view that nobody edits. It reads no logs and sends nothing.
 Start with `skills/engineering/i-have-ocd/SKILL.md`.
 
 ## What it reads and where it sends data
