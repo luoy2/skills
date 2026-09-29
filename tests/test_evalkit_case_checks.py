@@ -228,3 +228,125 @@ def test_a_pass_written_as_clauses_reaches_the_judge_numbered(kit):
     assert "(1) every far strike within tolerance is verified\n(2) no whole-chain request" in prompt
     assert kit.trap_pass_text({"pass": "legacy"}) == "legacy"
     assert kit.pass_clauses({"pass": "legacy"}) == [{"text": "legacy"}]
+
+
+# ------------------------------------------------------------------- case lint
+
+HIDDEN = '''\
+import pytest
+from pkg.selection import verify_strikes
+
+
+class FakeApp:
+    def __init__(self):
+        self.errors = []
+
+
+def test_a_query_failure_is_named(tmp_path):
+    """A failure is not an unlisted strike."""
+    app = FakeApp()
+    with pytest.raises(RuntimeError, match="query failed"):
+        verify_strikes(app, per_timeout=2.0)
+    msg = str(app.errors)
+    assert "strike 705 unavailable" in msg
+    assert "SPXW" in msg and "354" in msg
+    assert app.errors == []
+
+
+def test_the_report_lists_what_it_skipped(caplog):
+    report = verify_strikes(FakeApp())
+    assert report.not_live[0]["position_uid"] == "u1"
+    assert "Requested market data is not subscribed" in report.note
+    assert any("timed out" in r.getMessage() for r in caplog.records)
+
+
+def feed():
+    return "Requested market data is not subscribed"
+'''
+
+
+def _impl_case(tmp_path, kit, monkeypatch, **fields):
+    case_dir = tmp_path / "cases" / "W"
+    (case_dir / "hidden").mkdir(parents=True)
+    (case_dir / "hidden" / "test_sel.py.hidden").write_text(HIDDEN, encoding="utf-8")
+    case = {"id": "W", "kind": "implement", "dir": case_dir, "snapshot": "0" * 40,
+            "background": ["The fast path times out on META."], "owner_messages": ["fix it"],
+            "hidden_tests": {"files": [{"file": "hidden/test_sel.py.hidden", "place": "tests/test_sel.py"}]},
+            "trap": {"description": "d", "direction": "dir",
+                     "pass": [{"text": "a failure is not a missing strike",
+                               "checked_by": ["tests.test_sel::test_a_query_failure_is_named"]}]},
+            "rubric": [{"id": "R1", "text": "t", "evidence": "e"}], "interface": [], **fields}
+    monkeypatch.setattr(kit, "repo_tops", lambda sha: {"pkg"})
+    monkeypatch.setattr(kit, "snapshot_names", lambda sha, names: {"verify_strikes", "per_timeout", "note"} & set(names))
+    return case
+
+
+def _values(result, level, check):
+    return [f["value"] for f in result[level] if f["check"] == check]
+
+
+def test_wording_a_hidden_test_asserts_must_be_disclosed(kit, tmp_path, monkeypatch):
+    """W's tests asserted Chinese sentences nobody could guess: every implementer failed them."""
+    case = _impl_case(tmp_path, kit, monkeypatch)
+    result = kit.lint_case(case, {"implement_suffix": "go"})
+    assert _values(result, "errors", "literal") == ["query failed", "strike 705 unavailable", "timed out"]
+    where = [f["where"] for f in result["errors"] if f["value"] == "strike 705 unavailable"]
+    assert where == ["hidden/test_sel.py.hidden:16"]
+    case["interface"] = ["`verify_strikes` raises RuntimeError('query failed: strike 705 unavailable')"]
+    case["background"].append("A silent request has timed out.")
+    assert _values(kit.lint_case(case, {"implement_suffix": "go"}), "errors", "literal") == []
+
+
+def test_identifiers_numbers_short_tokens_and_wording_the_test_feeds_in_are_not_guesses(kit, tmp_path, monkeypatch):
+    case = _impl_case(tmp_path, kit, monkeypatch)
+    literals = _values(kit.lint_case(case, {"implement_suffix": "go"}), "errors", "literal")
+    assert "SPXW" not in literals and "354" not in literals and "u1" not in literals
+    assert "Requested market data is not subscribed" not in literals
+
+
+def test_a_name_the_snapshot_lacks_must_be_disclosed(kit, tmp_path, monkeypatch):
+    """Q's tests read `report.not_live` entries that the plan never described."""
+    case = _impl_case(tmp_path, kit, monkeypatch)
+    result = kit.lint_case(case, {"implement_suffix": "go"})
+    assert sorted(_values(result, "errors", "name")) == ["not_live", "position_uid"]
+    case["interface"] = ["`report.not_live`: a list of dicts with `position_uid`"]
+    assert _values(kit.lint_case(case, {"implement_suffix": "go"}), "errors", "name") == []
+
+
+def test_a_given_plan_case_lists_the_tests_that_touch_undisclosed_names(kit, tmp_path, monkeypatch):
+    case = _impl_case(tmp_path, kit, monkeypatch, modes=["given-plan"])
+    docs = kit.lint_case(case, {"implement_suffix": "go"})["docstrings"]
+    assert [d["test"] for d in docs] == ["tests.test_sel::test_a_query_failure_is_named",
+                                         "tests.test_sel::test_the_report_lists_what_it_skipped"]
+    assert docs[0]["docstring"] == "A failure is not an unlisted strike."
+    assert "not_live" in docs[1]["names"]
+    assert kit.lint_case(_impl_case(tmp_path / "direct", kit, monkeypatch), {"implement_suffix": "go"})["docstrings"] == []
+
+
+def test_a_pass_clause_must_cite_checks_that_exist(kit, tmp_path, monkeypatch):
+    case = _impl_case(tmp_path, kit, monkeypatch)
+    case["trap"]["pass"] += [{"text": "filters by class", "checked_by": ["R1", "tests.test_sel::test_gone", "C9"]},
+                             {"text": "unmapped clause"}]
+    result = kit.lint_case(case, {"implement_suffix": "go"})
+    assert _values(result, "errors", "checked_by") == ["tests.test_sel::test_gone", "C9"]
+    assert [f["where"] for f in result["warnings"] if f["check"] == "unmapped"] == ["trap.pass (3)"]
+    case["trap"]["pass"] = "one string"
+    assert [f["check"] for f in kit.lint_case(case, {"implement_suffix": "go"})["warnings"]] == ["pass_string"]
+
+
+def test_trap_wording_and_wrong_markers_are_flagged_for_planning_cases_too(kit, tmp_path, monkeypatch):
+    case_dir = tmp_path / "cases" / "A"
+    case_dir.mkdir(parents=True)
+    (case_dir / "plan.md").write_text("intro\nkeep infra/broker/ for now\n", encoding="utf-8")
+    case = {"id": "A", "dir": case_dir, "background": ["the owner asked", "machine directories stay as they are"],
+            "owner_messages": ["m"], "attachments": [{"file": "plan.md", "inline": True}],
+            "trap": {"description": "d", "direction": "as the recommended default, not as an option with preconditions",
+                     "pass": [{"text": "p", "checked_by": ["R1"]}], "wrong_markers": ["infra/(broker|pisces)/", "stay as"]},
+            "rubric": [{"id": "R1", "text": "t", "evidence": "e"}]}
+    monkeypatch.setattr(kit, "CFG", {"lint": {"direction_forbidden": ["not as an option with preconditions"]}})
+    result = kit.lint_case(case, {"suffix": "s"})
+    assert result["errors"] == []
+    assert [(f["check"], f["where"]) for f in result["warnings"]] == [
+        ("direction", "trap.direction"), ("wrong_marker", "plan.md:2"), ("wrong_marker", "background:2")]
+    case["trap"]["wrong_markers"] = ["("]
+    assert _values(kit.lint_case(case, {"suffix": "s"}), "errors", "bad_regex") == ["("]

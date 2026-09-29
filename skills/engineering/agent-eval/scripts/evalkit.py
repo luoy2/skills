@@ -32,6 +32,8 @@ its `hosts` entries let one config serve several machines.
 from __future__ import annotations
 
 import argparse
+import ast
+import builtins
 import concurrent.futures
 import datetime as dt
 import glob
@@ -241,6 +243,20 @@ TEXT_EN = {
     "casepage.count": "{done} / {total} marked · {edit} to change or drop",
     "casepage.marks_heading": "Eval case review marks",
     "casepage.unmarked": "unmarked",
+    "lint.error": "ERROR",
+    "lint.warning": "WARNING",
+    "lint.literal": "a hidden test asserts wording the candidate never reads",
+    "lint.name": "a hidden test uses a name that is neither in the snapshot nor in what the candidate reads",
+    "lint.syntax": "a hidden test file does not parse",
+    "lint.checked_by": "a trap.pass clause cites a rubric item or hidden test that does not exist",
+    "lint.unmapped": "a trap.pass clause names no rubric item or hidden test that checks it",
+    "lint.pass_string": "trap.pass is one string: write it as clauses, each mapped to a test or rubric item",
+    "lint.direction": "trap.direction contains a phrase from lint.direction_forbidden",
+    "lint.wrong_marker": "the case material itself suggests the wrong approach (trap.wrong_markers)",
+    "lint.bad_regex": "a trap.wrong_markers entry is not a valid regular expression",
+    "lint.more": "(+{n} more)",
+    "lint.docstrings": "Hidden tests touching an undisclosed name or wording, with what each says it checks; compare them with the plan:",
+    "lint.clean": "no findings",
 }
 EXPERIMENT_TEXT = ("candidate.", "reviewer.", "judge.")
 
@@ -1708,6 +1724,8 @@ def cmd_calibrate_tests(args):
     case = cases[args.case]
     if not is_impl(case):
         raise EvalError(f"{args.case} is not an implementation case")
+    lint = lint_case(case, common)
+    print_lint(lint)
     root = SCRATCH_ROOT / "_calibrate_tests" / args.case
     out = root / "out"
     results = {}
@@ -1722,9 +1740,11 @@ def cmd_calibrate_tests(args):
         print(f"note: bare snapshot passed {results['bare']['passed']}, case records baseline "
               f"{case['hidden_tests']['baseline']}", file=sys.stderr)
     ok = (results["bare"]["passed"] < case["hidden_tests"]["expected"]
-          and results["reference"]["passed"] == case["hidden_tests"]["expected"])
+          and results["reference"]["passed"] == case["hidden_tests"]["expected"]
+          and not lint["errors"])
     shutil.rmtree(root, ignore_errors=True)
     digest = case_digest(case)
+    results["lint"] = lint
     write_calibration("tests", args.case, digest, {"ok": ok, **results})
     print(json.dumps({"case": args.case, "case_digest": digest, "pass": ok, **results}, ensure_ascii=False, indent=1))
     return 0 if ok else 1
@@ -1754,6 +1774,360 @@ def impl_answer(rec, out, limit=120_000):
     heading = T["judge.diff_heading"].format(files=rec["diff"]["files"], added=rec["diff"]["added"],
                                              deleted=rec["diff"]["deleted"])
     return f"{rec.get('final', '')}\n\n{heading}\n" + ("".join(kept) or T["judge.no_changes"]) + note
+
+
+# ----------------------------------------------------------------- case lint
+
+# pytest fixtures whose attributes belong to pytest, not to the candidate's code.
+PYTEST_FIXTURES = {"caplog", "capsys", "capfd", "capsysbinary", "capfdbinary", "monkeypatch", "tmp_path",
+                   "tmp_path_factory", "tmpdir", "tmpdir_factory", "request", "recwarn", "pytestconfig"}
+
+
+def _library_attrs():
+    """Attribute names of builtin and common stdlib objects a test calls on its own values."""
+    import logging
+    import pathlib
+    import unittest.mock
+    names = set(dir(builtins))
+    for obj in (str, bytes, list, dict, set, frozenset, tuple, int, float, complex, bool, object, type,
+                BaseException, logging.LogRecord, pathlib.Path, re.Match, re.Pattern, unittest.mock.Mock):
+        names.update(dir(obj))
+    return names
+
+
+def _finding(check, where, value):
+    return {"check": check, "where": where, "value": value}
+
+
+def _worth_checking(literal):
+    """Wording a candidate would have to guess: not an identifier, a number or a ≤3-character ASCII token."""
+    t = literal.strip()
+    if not t or (t.isascii() and (t.isidentifier() or len(t) <= 3)):
+        return False
+    try:
+        float(t)
+        return False
+    except ValueError:
+        return True
+
+
+def _root_name(node):
+    """The Name an attribute, subscript or call chain starts from, or None."""
+    while isinstance(node, (ast.Attribute, ast.Subscript, ast.Call)):
+        node = node.func if isinstance(node, ast.Call) else node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _module_id(place):
+    return Path(place).with_suffix("").as_posix().replace("/", ".")
+
+
+def disclosed_text(case, common):
+    """Everything the candidate reads: the built prompt and each attachment placed in the snapshot."""
+    parts = [build_prompt(case, common)]
+    parts += [(case["dir"] / att["file"]).read_text(encoding="utf-8", errors="replace")
+              for att in case.get("attachments", []) if att.get("place")]
+    return "\n".join(parts)
+
+
+def _disclosed(value, text):
+    return re.search(r"(?<![A-Za-z0-9_])" + re.escape(value) + r"(?![A-Za-z0-9_])", text) is not None
+
+
+class _HiddenFile:
+    """One hidden test file's AST: what it asserts, what it uses and what it defines itself."""
+
+    def __init__(self, label, place, source, repo_tops):
+        self.label, self.place = label, place
+        self.tree = ast.parse(source)
+        self.imports = {}  # alias -> top-level module ("." for a relative import)
+        self.imported = []  # (line, name) imported from a repository module
+        self.literals, self.uses, self.kw_uses = [], [], []  # (line, value)
+        self.fed = set()  # string constants the file supplies itself, outside the literal positions
+        self.attr_defs, self.top_defs, self.classes = set(), set(), set()
+        self.tests = []  # (node id, FunctionDef)
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    self.imports[a.asname or a.name.split(".")[0]] = a.name.split(".")[0]
+            elif isinstance(node, ast.ImportFrom):
+                top = "." if node.level else (node.module or "").split(".")[0]
+                for a in node.names:
+                    self.imports[a.asname or a.name] = top
+                    if top == "." or top in repo_tops:
+                        self.imported.append((node.lineno, a.name))
+        self.library = {alias for alias, top in self.imports.items() if top != "." and top not in repo_tops}
+        self._definitions()
+        self._tests()
+
+    def _definitions(self):
+        for node in self.tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                self.top_defs.add(node.name)
+            if isinstance(node, ast.ClassDef):
+                self.classes.add(node.name)
+            for target in _assigned(node):
+                self.top_defs.add(target)
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        self.attr_defs.add(item.name)
+                    self.attr_defs.update(_assigned(item))
+            elif (isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
+                  and isinstance(node.value, ast.Name) and node.value.id in ("self", "cls")):
+                self.attr_defs.add(node.attr)
+            elif isinstance(node, ast.Dict):
+                self.attr_defs.update(k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str))
+        self.attr_defs |= self.top_defs
+
+    def _tests(self):
+        module = _module_id(self.place)
+        for node in self.tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+                self.tests.append((f"{module}::{node.name}", node))
+            elif isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test"):
+                        self.tests.append((f"{module}.{node.name}::{item.name}", item))
+
+    def scan(self, local_callables, local_classes):
+        """Literal assertions and used names; `local_callables` are defined by some hidden file.
+
+        A keyword passed to a builtin, a library or a hidden file's own class defines an attribute
+        (`SimpleNamespace(uid=1)`); one passed to a hidden file's function is that function's
+        parameter and defines nothing the code under test must have.
+        """
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Assert):
+                for cmp in (n for n in ast.walk(node.test) if isinstance(n, ast.Compare)):
+                    operands = [cmp.left, *cmp.comparators]
+                    for i, op in enumerate(cmp.ops):
+                        sides = ([operands[i]] if isinstance(op, (ast.In, ast.NotIn))
+                                 else operands[i:i + 2] if isinstance(op, (ast.Eq, ast.NotEq)) else [])
+                        self.literals += [(s.lineno, s.value, False, id(s)) for s in sides
+                                          if isinstance(s, ast.Constant) and isinstance(s.value, str)]
+            elif isinstance(node, ast.Call):
+                self._scan_call(node, local_callables, local_classes)
+            elif isinstance(node, ast.Attribute):
+                root = _root_name(node)
+                self_store = isinstance(node.ctx, ast.Store) and root in ("self", "cls")
+                if not self_store and root not in self.library and root not in PYTEST_FIXTURES \
+                        and not node.attr.startswith("__"):
+                    self.uses.append((node.lineno, node.attr))
+            elif isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
+                    and isinstance(node.slice.value, str) and node.slice.value.strip() \
+                    and "\n" not in node.slice.value:
+                root = _root_name(node)
+                if root not in self.library and root not in PYTEST_FIXTURES:
+                    self.uses.append((node.lineno, node.slice.value))
+        asserted = {lit[3] for lit in self.literals}
+        self.fed = {n.value for n in ast.walk(self.tree)
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in asserted}
+
+    def _scan_call(self, node, local_callables, local_classes):
+        func = node.func
+        pytest_call = (isinstance(func, ast.Attribute) and func.attr in ("raises", "warns")
+                       and isinstance(func.value, ast.Name) and self.imports.get(func.value.id) == "pytest") or \
+                      (isinstance(func, ast.Name) and func.id in ("raises", "warns") and self.imports.get(func.id) == "pytest")
+        if pytest_call:
+            self.literals += [(kw.value.lineno, kw.value.value, True, id(kw.value)) for kw in node.keywords
+                              if kw.arg == "match" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)]
+            return
+        root = _root_name(func)
+        # A call on a local value (`stack.evaluate(x=1)`) still names a parameter of the code under test.
+        direct = isinstance(func, ast.Name)
+        if root in self.library or root in PYTEST_FIXTURES or (direct and (root in local_classes
+                                                                            or hasattr(builtins, root))):
+            self.attr_defs.update(kw.arg for kw in node.keywords if kw.arg)
+            return
+        if direct and root in local_callables:
+            return
+        self.kw_uses += [(node.lineno, kw.arg) for kw in node.keywords if kw.arg]
+
+
+def _assigned(node):
+    """Names a statement binds directly: assignment and annotated-assignment targets."""
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target] \
+        if isinstance(node, (ast.AnnAssign, ast.AugAssign)) else []
+    out = []
+    for t in targets:
+        out += [n.id for n in ast.walk(t) if isinstance(n, ast.Name)]
+    return out
+
+
+_SNAPSHOT_WORDS = {}
+
+
+def _snapshot_words(snapshot):
+    """The snapshot's text files (≤2 MB each, binaries skipped) and the set of words in them.
+
+    Read with one ls-tree and one cat-file call. `git grep -o -w -f <names>` was the first
+    design; over a 239 MB snapshot with common names it ran for minutes (measured 2026-09-29),
+    since it prints every occurrence of every name.
+    """
+    if snapshot not in _SNAPSHOT_WORDS:
+        ls = subprocess.run(["git", "-C", str(REPO), "ls-tree", "-r", "-l", snapshot], capture_output=True, text=True)
+        if ls.returncode != 0:
+            raise EvalError(f"snapshot {snapshot[:9]} is not in {REPO}: {ls.stderr[-300:]}")
+        oids = []
+        for line in ls.stdout.splitlines():
+            meta, _ = line.split("\t", 1)
+            _, kind, oid, size = meta.split()
+            if kind == "blob" and size.isdigit() and int(size) <= 2_000_000:
+                oids.append(oid)
+        out = subprocess.run(["git", "-C", str(REPO), "cat-file", "--batch"], input=("\n".join(oids) + "\n").encode(),
+                             capture_output=True, check=True).stdout
+        texts, pos = [], 0
+        while pos < len(out):
+            head_end = out.index(b"\n", pos)
+            size = int(out[pos:head_end].split()[2])
+            body = out[head_end + 1:head_end + 1 + size]
+            pos = head_end + 1 + size + 1
+            if b"\0" not in body:
+                texts.append(body)
+        text = b"\n".join(texts)
+        _SNAPSHOT_WORDS[snapshot] = (text, set(re.findall(rb"[A-Za-z0-9_]+", text)))
+    return _SNAPSHOT_WORDS[snapshot]
+
+
+def snapshot_names(snapshot, names):
+    """Which of `names` occur as whole words (git grep -w's sense) anywhere in the snapshot."""
+    names = {n for n in names if n and "\n" not in n}
+    if not names:
+        return set()
+    text, words = _snapshot_words(snapshot)
+    found = set()
+    for name in names:
+        raw = name.encode("utf-8")
+        if raw in words or (not re.fullmatch(rb"[A-Za-z0-9_]+", raw) and re.search(
+                rb"(?<![A-Za-z0-9_])" + re.escape(raw) + rb"(?![A-Za-z0-9_])", text)):
+            found.add(name)
+    return found
+
+
+def repo_tops(snapshot):
+    proc = subprocess.run(["git", "-C", str(REPO), "ls-tree", "--name-only", snapshot], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise EvalError(f"snapshot {snapshot[:9]} is not in {REPO}: {proc.stderr[-300:]}")
+    return {Path(n).stem if n.endswith(".py") else n for n in proc.stdout.split()}
+
+
+def _hidden_files(case, tops):
+    out = []
+    for f in (case.get("hidden_tests") or {}).get("files", []):
+        source = (case["dir"] / f["file"]).read_text(encoding="utf-8")
+        try:
+            out.append(_HiddenFile(f["file"], f["place"], source, tops))
+        except SyntaxError as exc:
+            out.append({"file": f["file"], "line": exc.lineno})
+    return out
+
+
+def lint_case(case, common):
+    """Case checks a calibration cannot see. Errors fail `lint-case` and `calibrate-tests`.
+
+    Implementation cases: every wording a hidden test asserts, and every name it uses that the
+    snapshot lacks, must appear in what the candidate reads; for a given-plan case the tests
+    touching an undisclosed name are listed with their docstrings for comparison with the plan.
+    Every case: trap.pass clauses cite existing checks, trap.direction avoids the configured
+    phrases, and no attachment or background line matches trap.wrong_markers.
+    """
+    errors, warnings, docstrings = [], [], []
+    trap = case.get("trap") or {}
+    text = disclosed_text(case, common)
+    test_ids = set()
+    if is_impl(case):
+        tops = repo_tops(case["snapshot"]) | {Path(f["place"]).parts[0] for f in case["hidden_tests"]["files"]}
+        files = _hidden_files(case, tops)
+        errors += [_finding("syntax", f"{f['file']}:{f['line']}", "") for f in files if isinstance(f, dict)]
+        files = [f for f in files if not isinstance(f, dict)]
+        local_callables = set().union(*(f.top_defs for f in files)) if files else set()
+        local_classes = set().union(*(f.classes for f in files)) if files else set()
+        for f in files:
+            f.scan(local_callables, local_classes)
+            test_ids.update(tid for tid, _ in f.tests)
+        defined = set().union(*(f.attr_defs for f in files)) if files else set()
+        # Wording the tests feed in themselves (a broker's error text passed through) is not guessed.
+        fed = set().union(*(f.fed for f in files)) if files else set()
+        unshown = []  # (file, line, literal)
+        for f in files:
+            for line, literal, is_regex, _ in sorted(f.literals, key=lambda lit: lit[0]):
+                if not _worth_checking(literal) or literal in fed:
+                    continue
+                try:
+                    shown = re.search(literal, text) is not None if is_regex else literal in text
+                except re.error:
+                    shown = literal in text
+                if not shown:
+                    errors.append(_finding("literal", f"{f.label}:{line}", literal))
+                    unshown.append((f, line, literal))
+        occurrences = {}
+        for f in files:
+            for line, name in f.uses + f.kw_uses + f.imported:
+                occurrences.setdefault(name, []).append((f, line))
+        candidates = {n for n in occurrences if n not in defined} - _library_attrs()
+        candidates = {n for n in candidates if not _disclosed(n, text)}
+        missing = sorted(candidates - snapshot_names(case["snapshot"], candidates))
+        for name in missing:
+            where = sorted((f.label, line) for f, line in occurrences[name])
+            more = f" {T['lint.more'].format(n=len(where) - 1)}" if len(where) > 1 else ""
+            errors.append(_finding("name", f"{where[0][0]}:{where[0][1]}{more}", name))
+        if "given-plan" in case.get("modes", []):
+            for f in files:
+                for tid, fn in f.tests:
+                    inside = lambda g, line: g is f and fn.lineno <= line <= fn.end_lineno  # noqa: E731
+                    touched = sorted({n for n in missing for g, line in occurrences[n] if inside(g, line)}
+                                     | {lit for g, line, lit in unshown if inside(g, line)})
+                    if touched:
+                        docstrings.append({"test": tid, "where": f"{f.label}:{fn.lineno}", "names": touched,
+                                           "docstring": ast.get_docstring(fn) or ""})
+    rubric_ids = {r["id"] for r in rubric_for(case, common)}
+    if isinstance(trap.get("pass", ""), str):
+        warnings.append(_finding("pass_string", "trap.pass", ""))
+    else:
+        for i, clause in enumerate(pass_clauses(trap), 1):
+            cited = clause.get("checked_by") or []
+            if not cited:
+                warnings.append(_finding("unmapped", f"trap.pass ({i})", clause.get("text", "")[:80]))
+            for cid in cited:
+                if cid not in rubric_ids and cid.split("[")[0] not in test_ids:
+                    errors.append(_finding("checked_by", f"trap.pass ({i})", cid))
+    for phrase in (CFG.get("lint") or {}).get("direction_forbidden", []):
+        if phrase and phrase in (trap.get("direction") or ""):
+            warnings.append(_finding("direction", "trap.direction", phrase))
+    sources = [(f"background:{i}", line) for i, line in enumerate(case.get("background", []), 1)]
+    for att in case.get("attachments", []):
+        lines = (case["dir"] / att["file"]).read_text(encoding="utf-8", errors="replace").splitlines()
+        sources += [(f"{att['file']}:{n}", line) for n, line in enumerate(lines, 1)]
+    for pattern in trap.get("wrong_markers", []):
+        try:
+            rx = re.compile(pattern)
+        except re.error:
+            errors.append(_finding("bad_regex", "trap.wrong_markers", pattern))
+            continue
+        warnings += [_finding("wrong_marker", where, pattern) for where, line in sources if rx.search(line)]
+    return {"case": case["id"], "errors": errors, "warnings": warnings, "docstrings": docstrings}
+
+
+def print_lint(result):
+    for level, key in (("errors", "lint.error"), ("warnings", "lint.warning")):
+        for f in result[level]:
+            value = f" {f['value']!r}" if f["value"] else ""
+            print(f"{T[key]} {f['where']}: {T['lint.' + f['check']]}{value}")
+    if result["docstrings"]:
+        print(T["lint.docstrings"])
+        for d in result["docstrings"]:
+            print(f"  {d['test']} ({d['where']}; {', '.join(d['names'])}): {d['docstring'].splitlines()[0] if d['docstring'] else ''}")
+    if not result["errors"] and not result["warnings"]:
+        print(T["lint.clean"])
+
+
+def cmd_lint_case(args):
+    common, cases = load_cases([args.case])
+    result = lint_case(cases[args.case], common)
+    print_lint(result)
+    return 1 if result["errors"] else 0
 
 
 # --------------------------------------------------------------------- judge
@@ -2260,6 +2634,10 @@ def main(argv=None):
     ct = sub.add_parser("calibrate-tests", help="implementation case: hidden tests fail bare, pass with the real fix")
     ct.add_argument("--case", required=True)
     ct.set_defaults(func=cmd_calibrate_tests)
+
+    lint = sub.add_parser("lint-case", help="case checks: undisclosed wording and names in hidden tests, trap wording")
+    lint.add_argument("--case", required=True)
+    lint.set_defaults(func=cmd_lint_case)
 
     ado = sub.add_parser("adopt", help="forced adoption: rerun authors on earlier drafts and reviews")
     ado.add_argument("--batch", required=True)
