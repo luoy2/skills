@@ -1774,16 +1774,48 @@ JUDGE_SCHEMA = {
 }
 
 
+def case_kind(case):
+    return "implement" if is_impl(case) else "plan"
+
+
+def rubric_for(case, common):
+    """The case's rubric and the shared one, less items whose `kinds` exclude this case's kind.
+
+    A shared item such as "attempted no side effects" is a planning rule; an implementer
+    following an approved plan changes configuration by design (C1 on Q, 2026-09-29).
+    """
+    kind = case_kind(case)
+    return [r for r in case.get("rubric", []) + common.get("rubric", []) if kind in r.get("kinds", [kind])]
+
+
+def excluded_rubric_ids(case, common):
+    kind = case_kind(case)
+    return {r["id"] for r in case.get("rubric", []) + common.get("rubric", []) if kind not in r.get("kinds", [kind])}
+
+
+def pass_clauses(trap):
+    """`trap.pass` as a list of clauses: a legacy string is one clause without `checked_by`."""
+    value = trap.get("pass", "")
+    return [{"text": value}] if isinstance(value, str) else list(value)
+
+
+def trap_pass_text(trap):
+    """A string pass as written; a clause list numbered, one clause per line."""
+    if isinstance(trap.get("pass", ""), str):
+        return trap.get("pass", "")
+    return "\n".join(f"({i}) {c['text']}" for i, c in enumerate(pass_clauses(trap), 1))
+
+
 def judge_prompt(case, common, prompt, steps, answer):
-    rubric = case["rubric"] + common["rubric"]
+    rubric = rubric_for(case, common)
     traj = "\n".join(
         f"[{i}] {s['kind']}: {s.get('name', '')} {s.get('input', '')}{s.get('text', '')}".strip()
         for i, s in enumerate(steps, 1)) or T["judge.no_steps"]
     items = "\n".join(T["judge.rubric_item"].format(id=r["id"], text=r["text"], evidence=r["evidence"]) for r in rubric)
     return T["judge.prompt"].format(
         prompt=prompt, description=case["trap"]["description"], direction=case["trap"]["direction"],
-        trap_pass=case["trap"]["pass"], items=items, equivalents=case["equivalents"], trajectory=traj, answer=answer,
-        ids=", ".join(r["id"] for r in rubric))
+        trap_pass=trap_pass_text(case["trap"]), items=items, equivalents=case["equivalents"], trajectory=traj,
+        answer=answer, ids=", ".join(r["id"] for r in rubric))
 
 
 def call_judge(judge, prompt, workdir, key, timeout):
@@ -1936,11 +1968,14 @@ def cmd_calibrate(args):
 
 # -------------------------------------------------------------------- report
 
-def summarize(batch, cases, arms):
+def summarize(batch, cases, arms, common=None):
+    """One row per run with each judge's verdicts; rubric items the case's kind excludes are dropped."""
     records = load_records(batch)
     judgments = load_records(batch, "judgments.jsonl")
     rows = []
     for rec in records.values():
+        case = cases.get(rec.get("case"))
+        excluded = excluded_rubric_ids(case, common) if case and common else set()
         row = {k: rec.get(k) for k in ("run_id", "case", "candidate", "model", "effort", "mode", "status",
                                         "reasons", "cost_usd", "chain_cost_usd", "elapsed_s", "kind", "rep",
                                         "tests", "diff", "plan_run", "plan_cost_usd", "overlay", "host", "sandbox")}
@@ -1953,7 +1988,7 @@ def summarize(batch, cases, arms):
                 if j and "verdict" in j:
                     v = j["verdict"]
                     per_judge[judge["id"]] = {"trap": v["trap"]["pass"], "direction": v["trap"].get("direction"),
-                                              "items": {i["id"]: i["pass"] for i in v["items"]},
+                                              "items": {i["id"]: i["pass"] for i in v["items"] if i["id"] not in excluded},
                                               "trap_evidence": v["trap"]["evidence"]}
             row["scores"][target] = per_judge
         rows.append(row)
@@ -1980,7 +2015,7 @@ def agreement(per_judge):
 def cmd_report(args):
     common, cases = load_cases(None)
     arms = load_arms()
-    rows = summarize(args.batch, cases, arms)
+    rows = summarize(args.batch, cases, arms, common)
     out = Path(args.out) if args.out else batch_dir(args.batch) / "report.html"
     out.write_text(render_report(args.batch, rows, cases, arms), encoding="utf-8")
     (batch_dir(args.batch) / "summary.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1),

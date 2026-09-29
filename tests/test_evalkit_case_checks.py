@@ -179,3 +179,52 @@ def test_every_planned_run_carries_the_digest_it_was_gated_on(kit, tmp_path, mon
     kit.calibration_gaps(loaded)
     runs = kit.expand_runs(loaded, {"candidates": [{"id": "x", "efforts": ["high"]}], "modes": ["solo"]})
     assert runs[0]["case_digest"] == kit.case_digest(loaded["P"])
+
+
+# ------------------------------------------------------- rubric scope and trap wording
+
+COMMON = {"rubric": [{"id": "C1", "text": "no side effects", "evidence": "trajectory", "kinds": ["plan"]},
+                     {"id": "C2", "text": "states how it verified", "evidence": "answer"}]}
+
+
+def _trap_case(kind=None, trap_pass="acted and verified"):
+    case = {"trap": {"description": "waited", "direction": "act before the window", "pass": trap_pass},
+            "rubric": [{"id": "R1", "text": "names the evidence", "evidence": "answer"}], "equivalents": "none"}
+    if kind:
+        case["kind"] = kind
+    return case
+
+
+def test_a_planning_only_item_is_not_put_to_an_implementer(kit):
+    """C1 penalised an implementer for changing the configuration its approved plan told it to change."""
+    impl, plan = _trap_case("implement"), _trap_case()
+    assert [r["id"] for r in kit.rubric_for(impl, COMMON)] == ["R1", "C2"]
+    assert [r["id"] for r in kit.rubric_for(plan, COMMON)] == ["R1", "C1", "C2"]
+    prompt = kit.judge_prompt(impl, COMMON, "p", [], "answer")
+    assert "no side effects" not in prompt and "(R1, C2)" in prompt
+    assert "no side effects" in kit.judge_prompt(plan, COMMON, "p", [], "answer")
+
+
+def test_an_excluded_item_judged_in_an_earlier_batch_drops_out_of_the_score(kit, tmp_path, monkeypatch):
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    (tmp_path / "b").mkdir()
+    rec = {"run_id": "Q-a-high-given-plan-r1", "case": "Q", "kind": "implement", "mode": "given-plan", "status": "valid"}
+    (tmp_path / "b" / "runs.jsonl").write_text(json.dumps(rec) + "\n", encoding="utf-8")
+    verdict = {"trap": {"direction": True, "pass": True, "evidence": "e"},
+               "items": [{"id": "R1", "pass": True, "evidence": "e"}, {"id": "C1", "pass": False, "evidence": "e"}]}
+    rows = "".join(json.dumps({"key": f"{rec['run_id']}|final|{j}", "verdict": verdict}) + "\n" for j in ("j1", "j2"))
+    (tmp_path / "b" / "judgments.jsonl").write_text(rows, encoding="utf-8")
+    arms = {"judges": [{"id": "j1"}, {"id": "j2"}]}
+    (row,) = kit.summarize("b", {"Q": _trap_case("implement")}, arms, COMMON)
+    assert kit.agreement(row["scores"]["final"])[1] == (1, 1)
+    (old,) = kit.summarize("b", {"Q": _trap_case("implement")}, arms)
+    assert kit.agreement(old["scores"]["final"])[1] == (1, 2)
+
+
+def test_a_pass_written_as_clauses_reaches_the_judge_numbered(kit):
+    clauses = [{"text": "every far strike within tolerance is verified", "checked_by": ["R1"]},
+               {"text": "no whole-chain request", "checked_by": ["tests.t::test_no_chain"]}]
+    prompt = kit.judge_prompt(_trap_case(trap_pass=clauses), {"rubric": []}, "p", [], "answer")
+    assert "(1) every far strike within tolerance is verified\n(2) no whole-chain request" in prompt
+    assert kit.trap_pass_text({"pass": "legacy"}) == "legacy"
+    assert kit.pass_clauses({"pass": "legacy"}) == [{"text": "legacy"}]
