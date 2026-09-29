@@ -1,7 +1,7 @@
 {
   "name": "luoy2-skills",
   "displayName": "Agent Retro",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Agent skills from real engineering work, run in Claude Code on your own computer: agent-eval evaluates models and thinking effort on the mistakes your own agents made; questionnaire-review turns how you answer your agents' questions into rules they follow (both read your local session logs); i-have-ocd keeps one main line and parks every other finding instead of fixing or asking about it on the spot.",
   "author": {
     "name": "luoy2",

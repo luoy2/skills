@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
@@ -362,7 +363,7 @@ def test_a_stale_line_for_an_item_changed_after_the_copy_changes_nothing(cli, ho
     reconciled = listed["reconciled"]
     assert code == 0 and reconciled["stale"] == ["P1"] and reconciled["parked"] == ["P2"]
     assert "edited" not in reconciled and "closed" not in reconciled
-    assert Path(reconciled["set_aside"]).read_text(encoding="utf-8") == copy + "- a new line\n"
+    assert Path(reconciled["set_aside"][0]).read_text(encoding="utf-8") == copy + "- a new line\n"
     p1 = cli("show", "P1")[1]["item"]
     assert (p1["source_refs"], p1["version"]) == (["s1", "s2"], 2)
 
@@ -403,3 +404,199 @@ def test_a_view_without_its_parked_section_is_set_aside_not_emptied(cli, home):
     assert code == 0 and [i["ref"] for i in listed["items"]] == ["P1"]
     assert Path(listed["reconciled"]["unreadable"]).read_text(encoding="utf-8") == "oops\n"
     assert "- P1 · one" in view.read_text(encoding="utf-8")
+
+
+def _write_without(view, text, *prefixes, extra=""):
+    view.write_text("\n".join(l for l in text.splitlines() if not l.startswith(prefixes)) + "\n" + extra,
+                    encoding="utf-8")
+
+
+def test_a_copy_does_not_close_an_item_ruled_or_taken_after_it(cli, home):
+    park(cli, "one", "r1")
+    park(cli, "two", "r2")
+    copy = _rendered_copy(cli, home)
+    assert cli("decide", "P1", "--ref", "owner Q1: do it", "--expected-version", 1, "--request-id", "q",
+               "--by", "s3")[0] == 0
+    code, taken = cli("take", "P2", "--expected-version", 1, "--request-id", "t", "--by", "s2")
+    _write_without(home / "t.md", copy, "- P1 ·", "- P2 ·")
+    code, listed = cli("list")
+    reconciled = listed["reconciled"]
+    assert code == 0 and reconciled["stale"] == ["P1", "P2"] and "closed" not in reconciled
+    assert Path(reconciled["set_aside"][0]).read_text(encoding="utf-8").count("- P") == 0
+    assert [(i["ref"], i["status"]) for i in listed["items"]] == [("P1", "open"), ("P2", "taken")]
+    assert cli("done", "P2", "--kind", "pr", "--ref", "#500", "--expected-version", 2, "--request-id", "d",
+               "--token", taken["token"], "--by", "s2")[0] == 0
+
+
+def test_the_change_racing_a_hand_removal_is_not_closed_by_it(ocd, cli, home, monkeypatch):
+    park(cli, "one", "r1")
+    view = home / "t.md"
+    removed = "\n".join(l for l in view.read_text(encoding="utf-8").splitlines() if not l.startswith("- P1 ·")) + "\n"
+    synced = ocd.Store.sync
+
+    def sync_then_hand_edit(self):  # an old-skill session writes between this command's sync and its change
+        synced(self)
+        view.write_text(removed, encoding="utf-8")
+    monkeypatch.setattr(ocd.Store, "sync", sync_then_hand_edit)
+    code, out = cli("take", "P1", "--expected-version", 1, "--request-id", "t1", "--by", "s2")
+    monkeypatch.setattr(ocd.Store, "sync", synced)
+    assert code == 0 and out["reconciled"]["stale"] == ["P1"] and "closed" not in out["reconciled"]
+    item = cli("show", "P1")[1]["item"]
+    assert (item["status"], item["version"]) == ("taken", 2)
+
+
+def test_count_reports_what_it_took_in_on_standard_error(ocd, cli, home, capsys):
+    park(cli, "one", "r1")
+    park(cli, "two", "r2")
+    _write_without(home / "t.md", _rendered_copy(cli, home), "- P1 ·")
+    assert ocd.main(["count"]) == 0
+    printed = capsys.readouterr()
+    assert printed.out == "1\n"
+    assert json.loads(printed.err.strip().splitlines()[-1]) == {"reconciled": {"closed": ["P1"]}}
+    assert ocd.main(["count"]) == 0 and capsys.readouterr().err == ""
+
+
+def test_a_failed_change_still_reports_the_reconcile_it_committed(cli, home):
+    for n in (1, 2, 3):
+        park(cli, f"item {n}", f"r{n}")
+    _write_without(home / "t.md", _rendered_copy(cli, home), "- P2 ·")
+    code, out = cli("done", "P3", "--kind", "pr", "--ref", "#9", "--expected-version", 7, "--request-id", "dd")
+    assert code == 3 and out["reconciled"] == {"closed": ["P2"]}
+
+
+def test_a_line_naming_a_closed_or_listed_item_with_new_text_is_parked_citing_it(cli, home):
+    for n in (1, 2, 3):
+        park(cli, f"item {n}", f"r{n}")
+    assert cli("done", "P3", "--kind", "resolved", "--ref", "abc", "--expected-version", 1, "--request-id", "d")[0] == 0
+    copy = _rendered_copy(cli, home)
+    (home / "t.md").write_text(copy + "- P3 · new finding: nightly_recon missing from jobs.yaml\n"
+                               "- P2 · another finding: webhook retries every 5s\n- P2 · item 2\n", encoding="utf-8")
+    code, listed = cli("list")
+    assert code == 0 and listed["reconciled"]["parked"] == ["P4", "P5"]
+    assert listed["reconciled"]["ignored"] == ["P2: listed twice"]
+    p4, p5 = cli("show", "P4")[1]["item"], cli("show", "P5")[1]["item"]
+    assert (p4["summary"], p4["source_refs"]) == ("P3 · new finding: nightly_recon missing from jobs.yaml",
+                                                  ["hand-edited t.md; cites P3"])
+    assert p5["source_refs"] == ["hand-edited t.md; cites P2"]
+    assert cli("show", "P2")[1]["item"]["version"] == 1
+
+
+def test_an_edit_to_an_item_closed_after_the_copy_is_set_aside(cli, home):
+    park(cli, "one", "r1")
+    park(cli, "two", "r2")
+    copy = _rendered_copy(cli, home)
+    assert cli("done", "P2", "--kind", "ticket", "--ref", "#9", "--expected-version", 1, "--request-id", "d")[0] == 0
+    edited = copy.replace("- P2 · two", "- P2 · two; also seen in run 77 (new crash signature)")
+    (home / "t.md").write_text(edited, encoding="utf-8")
+    code, listed = cli("list")
+    reconciled = listed["reconciled"]
+    assert code == 0 and reconciled["stale"] == ["P2"] and "parked" not in reconciled
+    assert "run 77" in Path(reconciled["set_aside"][0]).read_text(encoding="utf-8")
+    assert [i["ref"] for i in listed["items"]] == ["P1"]
+
+
+def test_sections_the_store_does_not_read_are_kept_in_a_copy(cli, home):
+    park(cli, "one", "r1")
+    (home / "t.md").write_text(_rendered_copy(cli, home) + "\n## Cleared\n- item zero -> filed #812\n",
+                               encoding="utf-8")
+    reconciled = cli("list")[1]["reconciled"]
+    assert reconciled["other_sections"] == ["cleared"]
+    assert "filed #812" in Path(reconciled["set_aside"][0]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("marked", ["- ~~{line}~~ handled: filed #812", "- [x] {line}", "* {line}"])
+def test_a_marked_up_line_still_stands_for_its_item(cli, home, marked):
+    park(cli, "one", "r1", "--source", "s1")
+    park(cli, "two", "r2")
+    line = "P1 · one · sources: s1"
+    (home / "t.md").write_text(_rendered_copy(cli, home).replace("- " + line, marked.format(line=line)),
+                               encoding="utf-8")
+    code, listed = cli("list")
+    assert code == 0 and listed["reconciled"] == {"edited": ["P1"]}
+    assert [(i["ref"], i["status"]) for i in listed["items"]] == [("P1", "open"), ("P2", "open")]
+    assert cli("show", "P1")[1]["item"]["source_refs"][-1].endswith(marked.format(line=line).removeprefix("- "))
+
+
+def test_a_view_from_a_render_that_never_committed_is_set_aside_not_taken_in(ocd, cli, home):
+    park(cli, "one", "r1")
+    park(cli, "two", "r2")
+    view = home / "t.md"
+    uncommitted = re.sub(r"store revision \d+", "store revision 999", view.read_text(encoding="utf-8"))
+    _write_without(view, uncommitted, "- P1 ·")
+    code, listed = cli("list")
+    reconciled = listed["reconciled"]
+    assert code == 0 and set(reconciled) == {"uncommitted_view", "set_aside"}
+    assert [i["ref"] for i in listed["items"]] == ["P1", "P2"] and "- P1 · one" in view.read_text(encoding="utf-8")
+
+
+def test_an_earlier_render_nobody_edited_is_only_written_again(cli, home):
+    """A command that died after COMMIT, or whose write a later command overtook, leaves an older render."""
+    park(cli, "one", "r1")
+    view = home / "t.md"
+    older = view.read_bytes()
+    park(cli, "two", "r2")
+    assert cli("done", "P1", "--kind", "pr", "--ref", "#41", "--expected-version", 1, "--request-id", "d")[0] == 0
+    view.write_bytes(older)
+    code, listed = cli("list")
+    assert code == 0 and "reconciled" not in listed
+    assert [i["ref"] for i in listed["items"]] == ["P2"] and "P1 ·" not in view.read_text(encoding="utf-8")
+
+
+def test_a_ruling_on_a_taken_item_is_recorded_and_a_drop_waits_for_its_holder(cli):
+    park(cli, "one", "r1", "--needs-owner")
+    assert cli("take", "P1", "--expected-version", 1, "--request-id", "t", "--by", "s2")[0] == 0
+    code, out = cli("decide", "P1", "--ref", "questionnaire Q1: drop", "--expected-version", 2, "--request-id", "q")
+    assert code == 0 and (out["item"]["status"], out["item"]["needs_owner"]) == ("taken", False)
+    code, out = cli("drop", "P1", "--decision", "questionnaire Q1: drop", "--expected-version", 3, "--request-id", "x")
+    assert code == 3 and "held by s2" in out["message"]
+
+
+def test_a_lease_token_goes_only_to_its_take_and_works_only_for_its_holder(cli):
+    park(cli, "one", "r1")
+    code, taken = cli("take", "P1", "--expected-version", 1, "--request-id", "t1", "--by", "s2")
+    code, out = cli("take", "P1", "--expected-version", 5, "--request-id", "t1", "--by", "s3")
+    assert code == 3 and "token" not in out["original"] and out["original"]["item"]["ref"] == "P1"
+    code, out = cli("done", "P1", "--kind", "pr", "--ref", "#1", "--expected-version", 2, "--request-id", "d1",
+                    "--token", taken["token"], "--by", "s3")
+    assert code == 3 and "stale holder" in out["message"]
+    assert cli("done", "P1", "--kind", "pr", "--ref", "#1", "--expected-version", 2, "--request-id", "d2",
+               "--token", taken["token"], "--by", "s2")[0] == 0
+
+
+def test_import_md_keeps_a_main_line_set_since_and_sets_the_file_aside(cli, home):
+    view = home / "t.md"
+    view.write_text(LEGACY, encoding="utf-8")
+    assert cli("import-md", view)[0] == 0
+    assert cli("main", "set", "--next-step", "ship PR #500 (owner ruled 09-29)", "--expected-version", 1,
+               "--request-id", "m")[0] == 0
+    older = home / "older-copy.md"
+    older.write_text(LEGACY.replace(LONG_NEXT_STEP, "write the design (older)"), encoding="utf-8")
+    code, out = cli("import-md", older)
+    assert code == 0 and out["main"] == "conflict"
+    assert "write the design (older)" in Path(out["main_conflict"]).read_text(encoding="utf-8")
+    main = cli("main", "get")[1]
+    assert (main["main"]["next_step"], main["version"]) == ("ship PR #500 (owner ruled 09-29)", 2)
+
+
+def test_import_md_matches_items_already_in_the_store(cli, home):
+    view = home / "t.md"
+    view.write_text(LEGACY, encoding="utf-8")
+    assert cli("import-md", view)[0] == 0
+    view.write_text(LEGACY + "- c: finding\n- e: kept\n", encoding="utf-8")  # an old session's pre-import copy
+    assert cli("list")[1]["reconciled"]["parked"] == ["P8", "P9"]
+    assert cli("done", "P8", "--kind", "ticket", "--ref", "#77", "--expected-version", 1, "--request-id", "d")[0] == 0
+    later = home / "later-copy.md"
+    later.write_text(LEGACY + "- c: finding\n- e: kept\n- d: another\n", encoding="utf-8")
+    code, out = cli("import-md", later)
+    assert code == 0 and out["imported"] == ["P10"] and out["already"][-1] == "P9"
+    assert out["ignored"] == ["P8: done; a closed item is never reopened"]
+    assert cli("count") == (0, "9")
+
+
+def test_import_md_refuses_a_parked_heading_with_extra_words(cli, home):
+    view = home / "t.md"
+    view.write_text("## Main line\n- title: X\n\n## Parked (this machine only)\n- a: pending finding\n",
+                    encoding="utf-8")
+    code, out = cli("import-md", view)
+    assert code == 2 and "`## Parked`" in out["message"]
+    assert not (home / "t.db").exists()
