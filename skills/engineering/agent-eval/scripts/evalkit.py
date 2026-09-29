@@ -422,15 +422,31 @@ def case_digest(case):
     return h.hexdigest()[:12]
 
 
+def judges_digest():
+    """The configured judges (id, runtime, model, effort, client), as one short hash."""
+    fields = ("id", "runtime", "model", "effort", "client")
+    judges = [{f: j.get(f) for f in fields} for j in CFG.get("judges", [])]
+    return hashlib.sha256(json.dumps(judges, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+
+
+def calibration_key(kind, digest):
+    """A judges record holds for one case state, one set of judges and one text; a tests record for the case alone."""
+    if kind != "judges":
+        return digest
+    return hashlib.sha256(f"{digest}|{judges_digest()}|{TEXT_DIGEST}".encode("utf-8")).hexdigest()[:12]
+
+
 def calibration_path(kind, case_id, digest):
-    return RESULTS / "calibrations" / f"{kind}-{case_id}-{digest}.json"
+    return RESULTS / "calibrations" / f"{kind}-{case_id}-{calibration_key(kind, digest)}.json"
 
 
 def write_calibration(kind, case_id, digest, body):
     """One record per case state: `judges` from `calibrate`, `tests` from `calibrate-tests`."""
     path = calibration_path(kind, case_id, digest)
     path.parent.mkdir(parents=True, exist_ok=True)
-    row = {"kind": kind, "case": case_id, "case_digest": digest, **body, "text_digest": TEXT_DIGEST,
+    extra = {"judges_digest": judges_digest(), "calibration_key": calibration_key(kind, digest)} \
+        if kind == "judges" else {}
+    row = {"kind": kind, "case": case_id, "case_digest": digest, **extra, **body, "text_digest": TEXT_DIGEST,
            "kit_digest": KIT_DIGEST, "host": HOST, "at": now()}
     path.write_text(json.dumps(row, ensure_ascii=False, indent=1), encoding="utf-8")
     return path
@@ -444,8 +460,9 @@ def read_calibration(kind, case_id, digest):
 def calibration_gaps(cases):
     """What `run` refuses to launch on: each case needs a passing calibration of its current digest.
 
-    Judges must fail the negative and pass the positive; an implementation case's hidden tests
-    must also have passed `calibrate-tests`. Sets `case["digest"]` for the ledger rows.
+    Judges must fail the negative and pass the positive, under the configured judges and text
+    (changing either needs a new `calibrate`); an implementation case's hidden tests must also
+    have passed `calibrate-tests`. Sets `case["digest"]` for the ledger rows.
     """
     gaps = []
     for case_id, case in cases.items():
@@ -457,7 +474,9 @@ def calibration_gaps(cases):
             rec = read_calibration(kind, case_id, digest)
             if not rec or not rec.get("ok"):
                 state = "failed" if rec else "missing"
-                gaps.append(f"case {case_id} (digest {digest}): {kind} calibration {state}; run `evalkit.py {command}`")
+                scope = (f"digest {digest}, judges {judges_digest()}, text {TEXT_DIGEST}" if kind == "judges"
+                         else f"digest {digest}")
+                gaps.append(f"case {case_id} ({scope}): {kind} calibration {state}; run `evalkit.py {command}`")
     return gaps
 
 

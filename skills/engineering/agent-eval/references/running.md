@@ -93,8 +93,10 @@ output is not measuring the model.
 
 `run` and `adopt` launch nothing until every selected case is calibrated in its
 current state. Each case has a digest over every file of its directory and
-`common.json`; `calibrate` writes `results_dir/calibrations/judges-<case>-<digest>.json`
-and `calibrate-tests` writes `tests-<case>-<digest>.json`. A run needs a passing
+`common.json`; `calibrate` writes `results_dir/calibrations/judges-<case>-<key>.json`,
+keyed by that digest, the configured judges (id, runtime, model, effort, client) and
+the text digest, and `calibrate-tests` writes `tests-<case>-<digest>.json`. A changed
+judge or text therefore needs a new `calibrate`. A run needs a passing
 judges record (both judges fail the negative and pass the positive; a case with no
 positive fails) and, for an implementation case, a passing tests record (bare fails,
 reference passes, every alternative fails only excused tests, `lint-case` has no

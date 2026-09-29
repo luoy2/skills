@@ -484,3 +484,21 @@ def test_the_review_page_carries_each_case_its_lint_and_its_pass_clauses(tmp_pat
     assert [f["where"] for f in row["lint"]["warnings"]] == ["background:1"]
     assert data["lint_labels"]["checked_by"].startswith("a trap.pass clause")
     assert "function passRows" in page and "%%" not in page
+
+
+def test_a_judge_calibration_does_not_vouch_for_other_judges_or_another_text(kit, tmp_path, monkeypatch):
+    """A case calibrated with yesterday's judges says nothing about whether today's can fail and pass it."""
+    _cases(tmp_path, kit, monkeypatch)
+    _stop_at_launch(kit, monkeypatch)
+    kit.CFG["judges"] = [{"id": "j1", "runtime": "codex", "model": "gpt-6-sol", "effort": "high", "client": "gateway"}]
+    _, loaded = kit.load_cases(["P"])
+    kit.write_calibration("judges", "P", kit.case_digest(loaded["P"]), {"ok": True})
+    with pytest.raises(_PastTheGate):
+        kit.cmd_run(_run_args(["P"]))
+    kit.CFG["judges"][0]["model"] = "gpt-6.1-sol"
+    with pytest.raises(kit.EvalError, match="judges calibration missing"):
+        kit.cmd_run(_run_args(["P"]))
+    kit.CFG["judges"][0]["model"] = "gpt-6-sol"
+    monkeypatch.setattr(kit, "TEXT_DIGEST", "0123456789ab")
+    with pytest.raises(kit.EvalError, match="text 0123456789ab"):
+        kit.cmd_run(_run_args(["P"]))
