@@ -35,21 +35,23 @@ $O main get                                        # main set --expected-version
 $O list                                            # pending items, each with id, version and lease
 $O park "<one line>" --source <where seen> [--tracking <ticket>] [--needs-owner] --request-id R
 $O add-source P3 --source <where> --expected-version V --request-id R
-$O take P3 --expected-version V --request-id R     # prints a lease token
+$O take P3 --by <session> --expected-version V --request-id R     # prints a lease token
 $O decide P3 --ref <owner's ruling> --expected-version V --request-id R
 $O done P3 --kind ticket|pr|scheduled|resolved|transferred|recorded --ref <receipt> --expected-version V --request-id R
 $O drop P3 --decision <owner's ruling> --expected-version V --request-id R
 $O count                                           # M for the reply marker
 ```
 
-Each item has an id, `P<n>`, that is never reused; a ticket number or a title
-is an attribute, so two concerns on one ticket are two items. Every change
-names the version you read and a request id you choose: a retry with the same
-id returns the first result, and a stale version is refused with the current
-state, so read again before you act. Close an item you took with its
-`--token`. A missing, locked or damaged store is an error, never an empty
-queue. An item stays pending until it is closed with a receipt (rule 8); a
-closed item is never reopened, and a recurrence is a new item citing the old id.
+Pass `--by <session>` on every command, or set `I_HAVE_OCD_BY` once: it names
+who acted in the history and who holds a lease. Each item has an id, `P<n>`,
+that is never reused; a ticket number or a title is an attribute, so two
+concerns on one ticket are two items. Every change names the version you read
+and a request id you choose: a retry with the same id returns the first result,
+and a stale version is refused with the current state, so read again before you
+act. Close an item you took with its `--token`. A missing, locked or damaged
+store is an error, never an empty queue. An item stays pending until it is
+closed with a receipt (rule 8); a closed item is never reopened, and a
+recurrence is a new item citing the old id.
 
 A main line has a title, a done-when criterion (a link to the plan, issue or
 milestone that defines it), and the next step. If none is set, ask the owner
@@ -97,8 +99,9 @@ which one it is before starting work, as a single question.
    naming each item's id, the recommended action first, the other real
    choices, and always a "later" option ("以后再说"). An item answered "later"
    or left unanswered stays pending unchanged; record every ruling with
-   `decide` and close items as rule 8 says. Then let the owner pick what
-   becomes the next main line.
+   `decide`, a taken item included, and close items as rule 8 says. A drop of
+   a taken item waits for its lease to expire or goes through its holder. Then
+   let the owner pick what becomes the next main line.
 8. **Close handled items with a receipt.** Any session that handled an item
    closes it, whoever parked it; the main line stays with the session that set
    it. Take the item first (`take`), so two sessions do not handle it at once.
