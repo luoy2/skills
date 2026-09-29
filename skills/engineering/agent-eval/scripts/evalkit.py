@@ -368,6 +368,71 @@ def load_cases(ids=None):
     return common, cases
 
 
+def case_digest(case):
+    """Every file of the case directory and the shared common.json, as one short hash.
+
+    Calibration records are keyed by it, so an edit to any case file, a hidden test or the
+    shared rubric makes the case uncalibrated again. Dotfiles and __pycache__ are skipped.
+    """
+    h = hashlib.sha256()
+    root = Path(case["dir"])
+    for p in sorted(root.rglob("*")):
+        rel = p.relative_to(root)
+        if not p.is_file() or any(part.startswith(".") or part == "__pycache__" for part in rel.parts):
+            continue
+        h.update(rel.as_posix().encode("utf-8") + b"\0" + p.read_bytes() + b"\0")
+    h.update((CASES / "common.json").read_bytes())
+    return h.hexdigest()[:12]
+
+
+def calibration_path(kind, case_id, digest):
+    return RESULTS / "calibrations" / f"{kind}-{case_id}-{digest}.json"
+
+
+def write_calibration(kind, case_id, digest, body):
+    """One record per case state: `judges` from `calibrate`, `tests` from `calibrate-tests`."""
+    path = calibration_path(kind, case_id, digest)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"kind": kind, "case": case_id, "case_digest": digest, **body, "text_digest": TEXT_DIGEST,
+           "kit_digest": KIT_DIGEST, "host": HOST, "at": now()}
+    path.write_text(json.dumps(row, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def read_calibration(kind, case_id, digest):
+    path = calibration_path(kind, case_id, digest)
+    return load_json(path) if path.exists() else None
+
+
+def calibration_gaps(cases):
+    """What `run` refuses to launch on: each case needs a passing calibration of its current digest.
+
+    Judges must fail the negative and pass the positive; an implementation case's hidden tests
+    must also have passed `calibrate-tests`. Sets `case["digest"]` for the ledger rows.
+    """
+    gaps = []
+    for case_id, case in cases.items():
+        digest = case["digest"] = case_digest(case)
+        needed = [("judges", f"calibrate --batch <batch> --cases {case_id}")]
+        if is_impl(case):
+            needed.append(("tests", f"calibrate-tests --case {case_id}"))
+        for kind, command in needed:
+            rec = read_calibration(kind, case_id, digest)
+            if not rec or not rec.get("ok"):
+                state = "failed" if rec else "missing"
+                gaps.append(f"case {case_id} (digest {digest}): {kind} calibration {state}; run `evalkit.py {command}`")
+    return gaps
+
+
+def check_calibrated(cases, dry_run=False):
+    """No run starts on a case whose Trap is not shown passable and failable as written."""
+    gaps = calibration_gaps(cases)
+    if gaps and not dry_run:
+        raise EvalError("uncalibrated cases, nothing launched: " + " | ".join(gaps))
+    for gap in gaps:
+        print(f"not calibrated (a real run refuses): {gap}")
+
+
 def load_arms():
     return CFG
 
@@ -394,7 +459,8 @@ def expand_runs(cases, arms, modes=None, candidates=None, efforts=None, repeats=
                     for rep in range(1, (repeats or 1) + 1):
                         suffix = f"-r{rep}" if repeats else ""
                         runs.append({"run_id": f"{case_id}-{cand['id']}-{effort}-{mode}{suffix}", "case": case_id,
-                                     "candidate": cand, "effort": effort, "mode": mode})
+                                     "candidate": cand, "effort": effort, "mode": mode,
+                                     "case_digest": case.get("digest")})
     return runs
 
 
@@ -1082,8 +1148,8 @@ def execute_run(run, batch, common, cases, arms, prices, key, timeout):
         env = codex_env(root, root / "codex-home", key)
         argv = codex_argv(cand["model"], effort, root, root / "wt")
     base = {"run_id": run["run_id"], "batch": batch, "source_run": run.get("source_run"), "case": case["id"], "snapshot": case["snapshot"],
-            "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"], "runtime": cand["runtime"],
-            "client": cand["client"], "effort": effort, "mode": mode, "started_at": now()}
+            "case_digest": run.get("case_digest"), "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"],
+            "runtime": cand["runtime"], "client": cand["client"], "effort": effort, "mode": mode, "started_at": now()}
     failures = isolation_check(root, markers, prompt, env, cand["runtime"], cand["client"],
                                argv=argv)
     if failures:
@@ -1190,6 +1256,7 @@ def check_batch_text(batch):
 def cmd_run(args):
     check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
+    check_calibrated(cases, args.dry_run)
     impl_cases = {k: v for k, v in cases.items() if is_impl(v)}
     if impl_cases:
         if len(impl_cases) != len(cases):
@@ -1215,8 +1282,8 @@ def cmd_run(args):
                 record = fut.result()
             except Exception as exc:  # a crashed run is recorded, never silently dropped
                 record = {"run_id": run["run_id"], "batch": args.batch, "case": run["case"],
-                          "candidate": run["candidate"]["id"], "model": run["candidate"]["model"],
-                          "effort": run["effort"], "mode": run["mode"], "status": "invalid",
+                          "case_digest": run.get("case_digest"), "candidate": run["candidate"]["id"],
+                          "model": run["candidate"]["model"], "effort": run["effort"], "mode": run["mode"], "status": "invalid",
                           "reasons": [f"runner crashed: {type(exc).__name__}: {exc}"], "finished_at": now()}
             writer.append(record)
             cost = record.get("chain_cost_usd")
@@ -1310,12 +1377,14 @@ def adopt_runs(source_records, candidates, efforts, repeats):
 def cmd_adopt(args):
     check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
+    check_calibrated(cases, args.dry_run)
     arms, prices = load_arms(), load_prices()
     cands = {c["id"]: c for c in arms["candidates"]}
     source = [r for r in load_records(args.from_batch).values() if r["case"] in cases]
     runs = adopt_runs(source, args.candidates, args.efforts, args.repeats)
     for r in runs:
         r["candidate"] = cands[r["candidate_id"]]
+        r["case_digest"] = cases[r["case"]]["digest"]
     done = {k for k, v in load_records(args.batch).items() if v.get("status") == "valid"}
     todo = [r for r in runs if r["run_id"] not in done]
     print(f"batch {args.batch}: {len(runs)} adopt runs from {args.from_batch}, {len(todo)} to run")
@@ -1334,8 +1403,8 @@ def cmd_adopt(args):
                 record = fut.result()
             except Exception as exc:
                 record = {"run_id": run["run_id"], "batch": args.batch, "case": run["case"],
-                          "candidate": run["candidate"]["id"], "model": run["candidate"]["model"],
-                          "effort": run["effort"], "mode": "adopt", "source_run": run["source_run"],
+                          "case_digest": run.get("case_digest"), "candidate": run["candidate"]["id"],
+                          "model": run["candidate"]["model"], "effort": run["effort"], "mode": "adopt", "source_run": run["source_run"],
                           "status": "invalid", "reasons": [f"runner crashed: {type(exc).__name__}: {exc}"],
                           "finished_at": now()}
             writer.append(record)
@@ -1423,7 +1492,8 @@ def expand_impl_runs(cases, impl, modes=None, candidates=None, efforts=None, rep
                         continue
                     for rep in range(1, (repeats or impl.get("repeats", 1)) + 1):
                         runs.append({"run_id": f"{case_id}-{cand['id']}-{effort}-{mode}-r{rep}", "case": case_id,
-                                     "candidate": cand, "effort": effort, "mode": mode, "rep": rep})
+                                     "candidate": cand, "effort": effort, "mode": mode, "rep": rep,
+                                     "case_digest": case.get("digest")})
     return runs
 
 
@@ -1453,7 +1523,8 @@ def ensure_plans(batch, runs, common, cases, impl, prices, key, timeout, paralle
         if rid not in have:
             p = planners[pid]
             todo.append({"run_id": rid, "case": case_id, "candidate": {**p, "efforts": [p["effort"]]},
-                         "effort": p["effort"], "mode": "solo", "suffix": common["planner_suffix"]})
+                         "effort": p["effort"], "mode": "solo", "suffix": common["planner_suffix"],
+                         "case_digest": cases[case_id].get("digest")})
     if todo:
         print(f"plans: {len(wanted)} needed, {len(todo)} to write", flush=True)
         _run_pool(todo, lambda r: execute_run(r, batch, common, cases, load_arms(), prices, key, timeout),
@@ -1529,8 +1600,8 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
         shutil.rmtree(out)
     out.mkdir(parents=True)
     base = {"run_id": run["run_id"], "batch": batch, "kind": "implement", "case": case["id"],
-            "snapshot": case["snapshot"], "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"],
-            "runtime": cand["runtime"],
+            "snapshot": case["snapshot"], "case_digest": run.get("case_digest"), "overlay": overlay_files(),
+            "candidate": cand["id"], "model": cand["model"], "runtime": cand["runtime"],
             "client": cand["client"], "effort": effort, "mode": mode, "rep": run["rep"], "started_at": now()}
     # The leak check reads the task alone. A shared plan comes from a planner run that passed its
     # own isolation check, so a marker in it is the planner's derivation (a test file named by the
@@ -1596,8 +1667,8 @@ def _run_pool(runs, fn, writer, batch, parallel, budget=None):
                 record = fut.result()
             except Exception as exc:  # a crashed run is recorded, never silently dropped
                 record = {"run_id": run["run_id"], "batch": batch, "case": run["case"],
-                          "candidate": run["candidate"]["id"], "model": run["candidate"]["model"],
-                          "effort": run["effort"], "mode": run["mode"], "status": "invalid",
+                          "case_digest": run.get("case_digest"), "candidate": run["candidate"]["id"],
+                          "model": run["candidate"]["model"], "effort": run["effort"], "mode": run["mode"], "status": "invalid",
                           "reasons": [f"runner crashed: {type(exc).__name__}: {exc}"], "finished_at": now()}
             writer.append(record)
             cost = record.get("chain_cost_usd")
@@ -1653,7 +1724,9 @@ def cmd_calibrate_tests(args):
     ok = (results["bare"]["passed"] < case["hidden_tests"]["expected"]
           and results["reference"]["passed"] == case["hidden_tests"]["expected"])
     shutil.rmtree(root, ignore_errors=True)
-    print(json.dumps({"case": args.case, "pass": ok, **results}, ensure_ascii=False, indent=1))
+    digest = case_digest(case)
+    write_calibration("tests", args.case, digest, {"ok": ok, **results})
+    print(json.dumps({"case": args.case, "case_digest": digest, "pass": ok, **results}, ensure_ascii=False, indent=1))
     return 0 if ok else 1
 
 
@@ -1811,9 +1884,11 @@ def cmd_calibrate(args):
     """Both judges must fail each case's known negative and pass its known positive.
 
     The negative is the original agent's answer; failing it shows the judges can fail.
-    The optional positive is the answer the owner accepted after the correction;
-    passing it shows the Trap is passable as written. A judge that fails the positive
-    is too strict, or the pass condition asks for more than the owner did.
+    The positive is the answer the owner accepted after the correction; passing it shows
+    the Trap is passable as written. A judge that fails the positive is too strict, or the
+    pass condition asks for more than the owner did. A case without a positive fails:
+    a Trap nobody can pass looks the same as models that all fail. Each case's result is
+    recorded under its digest, and `run` launches only on a passing record.
     """
     check_batch_text(args.batch)
     common, cases = load_cases(args.cases)
@@ -1822,10 +1897,17 @@ def cmd_calibrate(args):
     writer = RecordWriter(batch_dir(args.batch) / "calibration.jsonl")
     ok = True
     for case in cases.values():
+        digest = case_digest(case)
+        if not case.get("calibration_positive"):
+            write_calibration("judges", case["id"], digest, {"ok": False, "batch": args.batch, "judges": {},
+                                                            "reason": "no calibration_positive"})
+            print(f"{case['id']} no positive: a trap nobody can pass looks like models that all fail  CALIBRATION FAIL")
+            ok = False
+            continue
         prompt = build_prompt(case, common)
-        samples = [("negative", case["calibration_negative"], False)]
-        if case.get("calibration_positive"):
-            samples.append(("positive", case["calibration_positive"], True))
+        samples = [("negative", case["calibration_negative"], False),
+                   ("positive", case["calibration_positive"], True)]
+        levels_by_judge, case_ok = {}, True
         for kind, rel, expect in samples:
             answer = (case["dir"] / rel).read_text(encoding="utf-8")
             for judge in arms["judges"]:
@@ -1838,12 +1920,17 @@ def cmd_calibrate(args):
                 trap = verdict["trap"]
                 levels = (bool(trap.get("direction")), bool(trap["pass"]))
                 good = levels == (expect, expect)
-                ok = ok and good
+                case_ok = case_ok and good
+                levels_by_judge.setdefault(judge["id"], {})[kind] = {"direction": levels[0], "pass": levels[1],
+                                                                     "ok": good}
                 writer.append({"key": f"{case['id']}|{kind}|{judge['id']}", "case": case["id"], "judge": judge["id"],
-                               "kind": kind, "expected": expect, "verdict": verdict,
+                               "kind": kind, "expected": expect, "verdict": verdict, "case_digest": digest,
                                "cost_usd": cost_usd(usage, prices), "elapsed_s": elapsed, "at": now()})
                 print(f"{case['id']} {kind:8} {judge['id']:12} direction={levels[0]} pass={levels[1]} "
                       f"{'OK' if good else 'CALIBRATION FAIL'}")
+        write_calibration("judges", case["id"], digest, {"ok": case_ok, "batch": args.batch,
+                                                        "judges": levels_by_judge})
+        ok = ok and case_ok
     return 0 if ok else 1
 
 
