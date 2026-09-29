@@ -383,3 +383,73 @@ def test_an_alternative_may_fail_only_reference_only_or_accepted_tests(kit):
     alt = {"t::a": "passed", "t::b": "failed", "t::c": "error", "t::e": "failed"}
     assert kit.alt_failures(reference, alt) == ["t::b", "t::c", "t::d"]
     assert kit.alt_failures(reference, alt, ["t::b"], {"t::c": "patch drops the error code"}) == ["t::d"]
+
+
+# ------------------------------------------------------------------------ report
+
+def _impl_row(run_id, passed, cases, status="valid", **kw):
+    return {"run_id": run_id, "case": "Q", "candidate": "sol", "model": "gpt-6-sol", "effort": "high",
+            "mode": "given-plan", "rep": 1, "status": status, "reasons": [], "elapsed_s": 10, "cost_usd": 1.0,
+            "chain_cost_usd": 1.0, "diff": {"added": 1, "deleted": 0}, "scores": {"final": {}},
+            "tests": {"passed": passed, "expected": 5, "pass_rate": passed / 5, "junit": True, "cases": cases}, **kw}
+
+
+Q_CASE = {"id": "Q", "title": "liveness", "kind": "implement", "role": "baseline",
+          "hidden_tests": {"expected": 5, "baseline": 1, "reference_only": ["t::design"]},
+          "rubric": [{"id": "R1", "text": ("Every refusal, generation change, unsubscribe and unpin path writes the row as "
+                               "not alive and forgets the quote"),
+                      "evidence": "diff"}]}
+
+
+def _outcomes(passing):
+    return {t: "passed" if t in passing else "failed" for t in ("t::a", "t::b", "t::c", "t::d", "t::design")}
+
+
+def test_the_report_names_the_tests_nobody_passed_and_the_ceiling_they_leave(kit):
+    """Q's range of 265–271 sat under a ceiling of ~272 that no plan-follower could exceed."""
+    rows = [_impl_row("Q-a-r1", 2, _outcomes({"t::a", "t::b"})), _impl_row("Q-b-r1", 3, _outcomes({"t::a", "t::b", "t::c"}))]
+    info = kit.discrimination(Q_CASE, rows)
+    assert info["never_passed"] == ["t::d"] and info["ceiling"] == 3 and info["scored_expected"] == 4
+    assert info["range"] == (2, 3) and info["no_discrimination"] is True
+    wide = [rows[0], _impl_row("Q-c-r1", 6, _outcomes(set()) | {"t::d": "passed"})]
+    assert kit.discrimination(Q_CASE, wide)["no_discrimination"] is False
+    reference = {"t::a": "passed", "t::b": "passed", "t::c": "passed", "t::d": "passed", "t::e": "passed"}
+    assert kit.discrimination(Q_CASE, rows, reference)["never_passed"] == ["t::d", "t::e"]
+
+
+def test_a_collection_error_is_not_counted_as_one_test_nobody_passed(kit):
+    rows = [_impl_row("Q-a-r1", 2, {**_outcomes({"t::a", "t::b"}), "tests.test_live": "error"})]
+    assert "tests.test_live" not in kit.discrimination(Q_CASE, rows)["never_passed"]
+
+
+def test_the_archived_report_keeps_timed_out_runs_their_disputes_and_what_invalid_runs_cost(kit, monkeypatch, tmp_path):
+    """Q's four high-effort runs were at 267–269 when the clock stopped; the old report dropped them."""
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    split = {"sol-high": {"trap": True, "direction": True, "items": {"R1": False},
+                          "evidence": {"R1": "the unpin path keeps the quote " + "x" * 300}, "trap_evidence": "t"},
+             "opus55-high": {"trap": False, "direction": True, "items": {"R1": True},
+                             "evidence": {"R1": "diff line 779 clears req_id"}, "trap_evidence": "misses unpin"}}
+    rows = [_impl_row("Q-sol-high-given-plan-r1", 3, _outcomes({"t::a", "t::b", "t::c"}), scores={"final": split}),
+            _impl_row("Q-sol-max-given-plan-r1", 3, _outcomes({"t::a", "t::b", "t::c"}), status="invalid",
+                      effort="max", timed_out=True, chain_cost_usd=4.0, reasons=["implement: timed out"]),
+            _impl_row("Q-sol-max-given-plan-r2", 2, _outcomes({"t::a", "t::b"}), status="invalid",
+                      effort="max", timed_out=True, rep=2, chain_cost_usd=5.0, reasons=["implement: timed out"])]
+    md = kit.render_markdown("b", rows, {"Q": Q_CASE}, {"judges": []})
+    assert "| gpt-6-sol | max | given-plan (timed out 2/2) | 3 · 2 | — | — | $4.50 | 10s |" in md
+    assert "Invalid runs spent a further $9.00" in md
+    assert "### Baseline cases" in md and "#### Q · liveness" in md
+    assert "Reachable ceiling 3/4" in md and "t::d" in md and "No discrimination" in md
+    head = "- Q-sol-high-given-plan-r1: R1 · Every refusal, generation change, unsubscribe and unpin path writes the row as …"
+    assert head in md
+    assert "  - opus55-high: pass — diff line 779 clears req_id" in md
+    assert "  - sol-high: fail — the unpin path keeps the quote " in md and "x" * 200 not in md
+    assert "- Q-sol-high-given-plan-r1: trap\n  - sol-high: direction ✓, pass ✓ — t\n  - opus55-high: direction ✓, pass ✗ — misses unpin" in md
+    page = kit.render_report("b", rows, {"Q": Q_CASE}, {"judges": []})
+    assert "timed out 2/2" in page and "diff line 779 clears req_id" in page and "Baseline cases" in page
+
+
+def test_an_implementer_timeout_follows_its_effort_unless_given(kit):
+    impl = {"timeouts": {"max": 7200}}
+    assert kit.impl_timeout(impl, "max") == 7200
+    assert kit.impl_timeout(impl, "high") == kit.DEFAULT_TIMEOUT
+    assert kit.impl_timeout(impl, "max", 900) == 900

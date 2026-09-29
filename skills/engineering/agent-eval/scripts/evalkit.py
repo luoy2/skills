@@ -175,6 +175,17 @@ TEXT_EN = {
         "judging is not included. {valid} valid runs, {invalid} invalid."),
     "report.disputes": "Disagreements for the owner to rule on",
     "report.invalid": "Invalid runs",
+    "report.invalid_cost": "Invalid runs spent a further ${cost:.2f} at list prices, not included in the run cost above.",
+    "report.dispute_item": "{head}: {item} · {text}",
+    "report.dispute_verdict": "{judge}: {verdict} — {evidence}",
+    "report.dispute_trap_verdict": "{judge}: direction {direction}, pass {passed} — {evidence}",
+    "report.timed_out": "timed out {n}/{m}",
+    "report.reference_only": "{n} reference-only hidden tests run but are not scored.",
+    "report.ceiling": "Reachable ceiling {ceiling}/{scored}: the scored tests less those no candidate passed. Candidates passed {lo}–{hi}.",
+    "report.never_passed": "Tests the reference passes that no candidate passed ({n}): {tests}",
+    "report.no_discrimination": "No discrimination: the candidates' range ({spread}) is below implement.min_spread ({min_spread}); this case does not rank them.",
+    "report.baseline_heading": "Baseline cases",
+    "report.baseline_note": "These cases check whether an implementer can finish an approved plan; they are not used to compare models.",
     "page.font": '"IBM Plex Sans",system-ui,sans-serif',
     "page.copied": "Copied — paste it back into the chat",
     "page.copy_by_hand": "Copy the box below by hand",
@@ -1165,7 +1176,8 @@ def execute_run(run, batch, common, cases, arms, prices, key, timeout):
         argv = codex_argv(cand["model"], effort, root, root / "wt")
     base = {"run_id": run["run_id"], "batch": batch, "source_run": run.get("source_run"), "case": case["id"], "snapshot": case["snapshot"],
             "case_digest": run.get("case_digest"), "overlay": overlay_files(), "candidate": cand["id"], "model": cand["model"],
-            "runtime": cand["runtime"], "client": cand["client"], "effort": effort, "mode": mode, "started_at": now()}
+            "runtime": cand["runtime"], "client": cand["client"], "effort": effort, "mode": mode, "timeout_s": timeout,
+            "started_at": now()}
     failures = isolation_check(root, markers, prompt, env, cand["runtime"], cand["client"],
                                argv=argv)
     if failures:
@@ -1290,8 +1302,8 @@ def cmd_run(args):
     key = gateway_key()
     writer = RecordWriter(batch_dir(args.batch) / "runs.jsonl")
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
-        futures = {pool.submit(execute_run, r, args.batch, common, cases, arms, prices, key, args.timeout): r
-                   for r in todo}
+        futures = {pool.submit(execute_run, r, args.batch, common, cases, arms, prices, key,
+                               args.timeout or DEFAULT_TIMEOUT): r for r in todo}
         for fut in concurrent.futures.as_completed(futures):
             run = futures[fut]
             try:
@@ -1411,8 +1423,8 @@ def cmd_adopt(args):
     key = gateway_key()
     writer = RecordWriter(batch_dir(args.batch) / "runs.jsonl")
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
-        futures = {pool.submit(execute_run, r, args.batch, common, cases, arms, prices, key, args.timeout): r
-                   for r in todo}
+        futures = {pool.submit(execute_run, r, args.batch, common, cases, arms, prices, key,
+                               args.timeout or DEFAULT_TIMEOUT): r for r in todo}
         for fut in concurrent.futures.as_completed(futures):
             run = futures[fut]
             try:
@@ -1635,7 +1647,8 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
     base = {"run_id": run["run_id"], "batch": batch, "kind": "implement", "case": case["id"],
             "snapshot": case["snapshot"], "case_digest": run.get("case_digest"), "overlay": overlay_files(),
             "candidate": cand["id"], "model": cand["model"], "runtime": cand["runtime"],
-            "client": cand["client"], "effort": effort, "mode": mode, "rep": run["rep"], "started_at": now()}
+            "client": cand["client"], "effort": effort, "mode": mode, "rep": run["rep"], "timeout_s": timeout,
+            "started_at": now()}
     # The leak check reads the task alone. A shared plan comes from a planner run that passed its
     # own isolation check, so a marker in it is the planner's derivation (a test file named by the
     # repository's convention), not a leak; it is recorded, not rejected.
@@ -1707,13 +1720,21 @@ def _run_pool(runs, fn, writer, batch, parallel, budget=None):
             cost = record.get("chain_cost_usd")
             spent += (record.get("cost_usd") or 0.0)
             tests = record.get("tests")
-            tail = f" tests {tests['passed']}/{tests['expected']}" if tests else ""
+            tail = f" tests {tests['passed']}/{tests.get('scored_expected', tests['expected'])}" if tests else ""
             print(f"{record['status']:7} {record['run_id']:40} ${cost if cost is not None else '?'} "
                   f"{record.get('elapsed_s', '?')}s{tail} {'; '.join(record.get('reasons', []))[:160]}", flush=True)
             if budget is not None and spent >= budget:
                 cancelled = sum(f.cancel() for f in futures)
                 print(f"budget ${budget} reached (${spent:.2f}); {cancelled} queued runs not started", flush=True)
                 budget = None
+
+
+def impl_timeout(impl, effort, given=None):
+    """An implementer's time limit: `--timeout` if given, else `implement.timeouts[effort]`, else the default.
+
+    One limit for every effort cut the high efforts short on Q (four runs at 267–269 tests).
+    """
+    return given or (impl.get("timeouts") or {}).get(effort, DEFAULT_TIMEOUT)
 
 
 def cmd_run_impl(args, common, cases):
@@ -1729,8 +1750,10 @@ def cmd_run_impl(args, common, cases):
             print(r["run_id"])
         return 0
     key = gateway_key()
-    plans = ensure_plans(args.batch, todo, common, cases, impl, prices, key, args.timeout, args.parallel)
-    _run_pool(todo, lambda r: execute_impl_run(r, args.batch, common, cases, impl, prices, key, args.timeout, plans),
+    plans = ensure_plans(args.batch, todo, common, cases, impl, prices, key, args.timeout or DEFAULT_TIMEOUT,
+                         args.parallel)
+    _run_pool(todo, lambda r: execute_impl_run(r, args.batch, common, cases, impl, prices, key,
+                                               impl_timeout(impl, r["effort"], args.timeout), plans),
               RecordWriter(batch_dir(args.batch) / "runs.jsonl"), args.batch, args.parallel, args.budget)
     return 0
 
@@ -2408,7 +2431,11 @@ def cmd_calibrate(args):
 # -------------------------------------------------------------------- report
 
 def summarize(batch, cases, arms, common=None):
-    """One row per run with each judge's verdicts; rubric items the case's kind excludes are dropped."""
+    """One row per run with each judge's verdicts and evidence.
+
+    Rubric items the case's kind excludes are dropped. An implementation row written before
+    per-test outcomes were recorded gets them from the run's saved junit report.
+    """
     records = load_records(batch)
     judgments = load_records(batch, "judgments.jsonl")
     rows = []
@@ -2417,7 +2444,12 @@ def summarize(batch, cases, arms, common=None):
         excluded = excluded_rubric_ids(case, common) if case and common else set()
         row = {k: rec.get(k) for k in ("run_id", "case", "candidate", "model", "effort", "mode", "status",
                                         "reasons", "cost_usd", "chain_cost_usd", "elapsed_s", "kind", "rep",
-                                        "tests", "diff", "plan_run", "plan_cost_usd", "overlay", "host", "sandbox")}
+                                        "tests", "diff", "plan_run", "plan_cost_usd", "overlay", "host", "sandbox",
+                                        "case_digest", "timeout_s")}
+        row["timed_out"] = any(s.get("timed_out") for s in rec.get("stages") or [])
+        junit = batch_dir(batch) / "runs" / rec["run_id"] / "hidden-junit.xml"
+        if row["tests"] and "cases" not in row["tests"] and junit.exists():
+            row["tests"] = {**row["tests"], "cases": parse_junit(junit, row["tests"].get("expected", 0))["cases"]}
         row["scores"] = {}
         targets = [("final", None)] if rec.get("kind") == "implement" else judge_targets(rec)
         for target, _ in targets if rec.get("status") == "valid" else []:
@@ -2426,8 +2458,10 @@ def summarize(batch, cases, arms, common=None):
                 j = judgments.get(f"{rec['run_id']}|{target}|{judge['id']}")
                 if j and "verdict" in j:
                     v = j["verdict"]
+                    kept = [i for i in v["items"] if i["id"] not in excluded]
                     per_judge[judge["id"]] = {"trap": v["trap"]["pass"], "direction": v["trap"].get("direction"),
-                                              "items": {i["id"]: i["pass"] for i in v["items"] if i["id"] not in excluded},
+                                              "items": {i["id"]: i["pass"] for i in kept},
+                                              "evidence": {i["id"]: i.get("evidence", "") for i in kept},
                                               "trap_evidence": v["trap"]["evidence"]}
             row["scores"][target] = per_judge
         rows.append(row)
@@ -2456,12 +2490,12 @@ def cmd_report(args):
     arms = load_arms()
     rows = summarize(args.batch, cases, arms, common)
     out = Path(args.out) if args.out else batch_dir(args.batch) / "report.html"
-    out.write_text(render_report(args.batch, rows, cases, arms), encoding="utf-8")
+    out.write_text(render_report(args.batch, rows, cases, arms, common), encoding="utf-8")
     (batch_dir(args.batch) / "summary.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1),
                                                         encoding="utf-8")
     print(out)
     if args.md:
-        Path(args.md).write_text(render_markdown(args.batch, rows, cases, arms), encoding="utf-8")
+        Path(args.md).write_text(render_markdown(args.batch, rows, cases, arms, common), encoding="utf-8")
         print(args.md)
     return 0
 
@@ -2478,7 +2512,125 @@ def _verdict(per):
     return direction, agree([s["trap"] for s in per.values()])
 
 
-def render_markdown(batch, rows, cases, arms):
+def _clip(text, limit):
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def disputes_of(run_id, target, per, case, common, trap_head):
+    """Each rubric item and Trap level the judges split on, with every judge's verdict and evidence.
+
+    `trap_head` is the heading of a Trap split (it names the run and, for plans, the target).
+    Returns [(heading, [one line per judge])].
+    """
+    if not per:
+        return []
+    mark = {True: "✓", False: "✗", None: "?"}
+    head = run_id if target is None else f"{run_id} {target}"
+    texts = {r["id"]: r["text"] for r in (case or {}).get("rubric", []) + (common or {}).get("rubric", [])}
+    out = []
+    for item in agreement(per)[2]:
+        out.append((T["report.dispute_item"].format(head=head, item=item, text=_clip(texts.get(item, ""), 80)),
+                    [T["report.dispute_verdict"].format(
+                        judge=j, verdict=T["report.pass"] if s["items"].get(item) else T["report.fail"],
+                        evidence=_clip((s.get("evidence") or {}).get(item, ""), 200)) for j, s in per.items()]))
+    d, t = _verdict(per)
+    if d is None or t is None:
+        out.append((trap_head, [T["report.dispute_trap_verdict"].format(
+            judge=j, direction=mark.get(s.get("direction"), "?"), passed=mark.get(s["trap"], "?"),
+            evidence=_clip(s.get("trap_evidence"), 200)) for j, s in per.items()]))
+    return out
+
+
+def discrimination(case, rows, reference_cases=None):
+    """What the hidden tests can tell apart on this case's valid runs.
+
+    From the per-test outcomes: the tests the reference passes that no candidate passed, the
+    reachable ceiling (scored tests less those), the candidates' range of passed tests, and
+    whether that range is below `implement.min_spread` (default 3), in which case the case does
+    not discriminate between candidates. Without the calibration record's reference outcomes,
+    the tests are those the runs reported, collection errors of a whole file left out.
+    """
+    ht = case["hidden_tests"]
+    reference_only = set(ht.get("reference_only", []))
+    scored = ht["expected"] - len(reference_only)
+    matrix = [r["tests"]["cases"] for r in rows if (r.get("tests") or {}).get("cases")]
+    if reference_cases:
+        universe = {t for t, outcome in reference_cases.items() if outcome == "passed"} - reference_only
+    else:
+        universe = {t for cases in matrix for t in cases if "::" in t} - reference_only
+    never = sorted(t for t in universe if matrix and not any(cases.get(t) == "passed" for cases in matrix))
+    passed = [r["tests"]["passed"] for r in rows if r.get("tests")]
+    lo, hi = (min(passed), max(passed)) if passed else (None, None)
+    min_spread = (CFG.get("implement") or {}).get("min_spread", 3)
+    return {"never_passed": never, "ceiling": scored - len(never) if matrix else None, "scored_expected": scored,
+            "range": (lo, hi), "min_spread": min_spread, "reference_only": len(reference_only),
+            "no_discrimination": bool(passed) and hi - lo < min_spread}
+
+
+def reference_outcomes(case_id, rows, case):
+    """The reference's per-test outcomes from the tests calibration the rows ran under, if recorded."""
+    digests = sorted({r.get("case_digest") for r in rows if r.get("case_digest")})
+    if case.get("dir"):
+        digests.append(case_digest(case))
+    for digest in digests:
+        rec = read_calibration("tests", case_id, digest)
+        if rec and (rec.get("reference") or {}).get("cases"):
+            return rec["reference"]["cases"]
+    return None
+
+
+def discrimination_notes(case_id, case, rows):
+    """The caption lines under an implementation case's table."""
+    info = discrimination(case, rows, reference_outcomes(case_id, rows, case))
+    lines = []
+    if info["reference_only"]:
+        lines.append(T["report.reference_only"].format(n=info["reference_only"]))
+    if info["ceiling"] is not None:
+        lines.append(T["report.ceiling"].format(ceiling=info["ceiling"], scored=info["scored_expected"],
+                                                lo=info["range"][0], hi=info["range"][1]))
+    if info["never_passed"]:
+        lines.append(T["report.never_passed"].format(n=len(info["never_passed"]),
+                                                     tests=T["report.list_sep"].join(info["never_passed"])))
+    if info["no_discrimination"]:
+        lines.append(T["report.no_discrimination"].format(spread=info["range"][1] - info["range"][0],
+                                                          min_spread=info["min_spread"]))
+    return lines
+
+
+def timed_out_groups(case_id, rows):
+    """Timed-out implementation runs with test results, by arm: they stay invalid but keep their evidence."""
+    groups, sizes = {}, {}
+    for r in rows:
+        if r["case"] != case_id:
+            continue
+        key = (r["candidate"], r["model"], r["effort"], r["mode"])
+        sizes[key] = sizes.get(key, 0) + 1
+        if r["status"] != "valid" and r.get("timed_out") and (r.get("tests") or {}).get("junit"):
+            groups.setdefault(key, []).append(r)
+    return {k: (sorted(v, key=lambda r: r.get("rep") or 0), sizes[k]) for k, v in groups.items()}
+
+
+def spend(rows):
+    """List-price cost of these runs, a shared plan counted once."""
+    plans = {r["plan_run"]: r.get("plan_cost_usd") or 0 for r in rows if r.get("plan_run")}
+    return (sum(r.get("chain_cost_usd") or 0 for r in rows if not r.get("plan_run"))
+            + sum(r.get("cost_usd") or 0 for r in rows if r.get("plan_run")) + sum(plans.values()))
+
+
+def case_order(cases):
+    """Ranking cases first, then baseline cases, which check an approved plan can be finished."""
+    ranking = [(k, c) for k, c in cases.items() if c.get("role", "ranking") != "baseline"]
+    return ranking, [(k, c) for k, c in cases.items() if c.get("role", "ranking") == "baseline"]
+
+
+def _mean_cost_time(reps):
+    costs = [r["chain_cost_usd"] for r in reps if r.get("chain_cost_usd") is not None]
+    secs = [r["elapsed_s"] for r in reps if r.get("elapsed_s")]
+    return ("$%.2f" % (sum(costs) / len(costs)) if costs else "?"), (f"{int(sum(secs) / len(secs))}" if secs else "?")
+
+
+def render_markdown(batch, rows, cases, arms, common=None):
     """The archived form of a batch: the same tables as the HTML report, as Markdown.
 
     Written for `docs/agent-eval/`; the page's conclusion section is added by hand
@@ -2490,12 +2642,12 @@ def render_markdown(batch, rows, cases, arms):
     invalid = [r for r in rows if r["status"] != "valid"]
     judgments = load_records(batch, "judgments.jsonl")
     # A shared plan is paid once, however many implementers used it.
-    plans = {r["plan_run"]: r.get("plan_cost_usd") or 0 for r in valid if r.get("plan_run")}
-    run_cost = (sum(r.get("chain_cost_usd") or 0 for r in valid if not r.get("plan_run"))
-                + sum(r.get("cost_usd") or 0 for r in valid if r.get("plan_run")) + sum(plans.values()))
+    run_cost = spend(valid)
     judge_cost = sum(j.get("cost_usd") or 0 for j in judgments.values())
     out = [T["report.md_title"].format(batch=batch), "",
            T["report.md_intro"].format(valid=len(valid), invalid=len(invalid), run_cost=run_cost, judge_cost=judge_cost), ""]
+    if invalid and spend(rows) - run_cost > 0.005:
+        out += [T["report.invalid_cost"].format(cost=spend(rows) - run_cost), ""]
     overlaid = sorted({f for r in valid for f in (r.get("overlay") or {})})
     if overlaid:
         out += [T["report.md_overlay"].format(files=T["report.list_sep"].join(f"`{f}`" for f in overlaid)), ""]
@@ -2508,70 +2660,97 @@ def render_markdown(batch, rows, cases, arms):
                                           for (h, sb), n in sorted(machines.items()))
         out += [T["report.md_hosts"].format(hosts=hosts), ""]
     disputes = []
-    for case_id, case in cases.items():
-        case_rows = [r for r in valid if r["case"] == case_id]
-        if not case_rows:
-            continue
-        out += [f"### {case_id} · {case['title']}", ""]
-        if is_impl(case):
-            ht = case["hidden_tests"]
-            out += [T["report.md_hidden"].format(expected=ht["expected"], baseline=ht.get("baseline", "?")), "",
-                    "| " + " | ".join(T["report.impl_columns"]) + " |",
-                    "|---|---|---|---|---|---|---|---|"]
-            groups = {}
-            for r in case_rows:
-                groups.setdefault((r["model"], r["effort"], r["mode"]), []).append(r)
-            for key in sorted(groups, key=lambda k: (k[0], effort_order.index(k[1]), k[2])):
-                reps = sorted(groups[key], key=lambda r: r.get("rep") or 0)
-                traps, items = [], []
-                for r in reps:
-                    per = r["scores"].get("final") or {}
-                    d, t = _verdict(per)
-                    traps.append(f"{mark[d]}/{mark[t]}")
-                    _, agreed, disputed = agreement(per) if per else (None, None, [])
-                    items.append(f"{agreed[0]}/{agreed[1]}" if agreed else "—")
-                    if per and (d is None or t is None):
-                        disputes.append(T["report.md_dispute_trap"].format(run=r["run_id"]))
-                costs = [r["chain_cost_usd"] for r in reps if r.get("chain_cost_usd") is not None]
-                secs = [r["elapsed_s"] for r in reps if r.get("elapsed_s")]
-                out.append(f"| {key[0]} | {key[1]} | {key[2]} | {' · '.join(str(r['tests']['passed']) for r in reps)} | "
-                           f"{' · '.join(traps)} | {' · '.join(items)} | "
-                           f"{'$%.2f' % (sum(costs) / len(costs)) if costs else '?'} | "
-                           f"{int(sum(secs) / len(secs)) if secs else '?'}s |")
-        else:
-            out += ["| " + " | ".join(T["report.plan_columns"]) + " |",
-                    "|---|---|---|---|---|---|---|---|---|"]
-            for r in sorted(case_rows, key=lambda r: (r["model"], effort_order.index(r["effort"]), r["mode"])):
-                cells = []
-                for target in ("draft", "final"):
-                    per = r["scores"].get(target) or (r["scores"].get("final") if r["mode"] != "review" else {}) or {}
-                    d, t = _verdict(per)
-                    _, agreed, _ = agreement(per) if per else (None, None, [])
-                    cells += [f"{mark[d]}/{mark[t]}", f"{agreed[0]}/{agreed[1]}" if agreed else "—"]
-                    if per and (d is None or t is None):
-                        disputes.append(T["report.md_dispute_target_trap"].format(run=r["run_id"], target=target))
-                if r["mode"] != "review":
-                    cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
-                cost = r.get("chain_cost_usd")
-                out.append(f"| {r['model']} | {r['effort']} | {r['mode']} | {' | '.join(cells)} | "
-                           f"{'$%.2f' % cost if cost is not None else '?'} | {r.get('elapsed_s') or '?'}s |")
-        out.append("")
+    ranking, baseline = case_order(cases)
+    for section, level in ((ranking, "###"), (baseline, "####")):
+        shown = [(k, c) for k, c in section if any(r["case"] == k for r in valid)
+                 or (is_impl(c) and timed_out_groups(k, rows))]
+        if section is baseline and shown:
+            out += [f"### {T['report.baseline_heading']}", "", T["report.baseline_note"], ""]
+        for case_id, case in shown:
+            case_rows = [r for r in valid if r["case"] == case_id]
+            out += [f"{level} {case_id} · {case['title']}", ""]
+            if is_impl(case):
+                out += _markdown_impl_table(case_id, case, case_rows, rows, common, disputes, effort_order, mark)
+            else:
+                out += _markdown_plan_table(case, case_rows, common, disputes, effort_order, mark)
+            out.append("")
     none = f"- {T['report.none']}"
-    out += [T["report.md_disputes"], ""] + ([f"- {d}" for d in disputes] or [none]) + [""]
+    lines = []
+    for head, verdicts in disputes:
+        lines += [f"- {head}"] + [f"  - {v}" for v in verdicts]
+    out += [T["report.md_disputes"], ""] + (lines or [none]) + [""]
     out += [T["report.md_invalid"], ""] + ([T["report.md_invalid_item"].format(run=r["run_id"], reasons="; ".join(r.get("reasons") or []))
                                           for r in invalid] or [none]) + [""]
     return "\n".join(out)
 
 
-def render_impl_case(case_id, case, rows):
-    """One table per implementation case: each arm's repeats side by side, then their mean."""
+def _markdown_impl_table(case_id, case, case_rows, rows, common, disputes, effort_order, mark):
+    ht = case["hidden_tests"]
+    out = [T["report.md_hidden"].format(expected=ht["expected"], baseline=ht.get("baseline", "?")), "",
+           "| " + " | ".join(T["report.impl_columns"]) + " |",
+           "|---|---|---|---|---|---|---|---|"]
+    groups = {}
+    for r in case_rows:
+        groups.setdefault((r["model"], r["effort"], r["mode"]), []).append(r)
+    for key in sorted(groups, key=lambda k: (k[0], effort_order.index(k[1]), k[2])):
+        reps = sorted(groups[key], key=lambda r: r.get("rep") or 0)
+        traps, items = [], []
+        for r in reps:
+            per = r["scores"].get("final") or {}
+            d, t = _verdict(per)
+            traps.append(f"{mark[d]}/{mark[t]}")
+            _, agreed, _ = agreement(per) if per else (None, None, [])
+            items.append(f"{agreed[0]}/{agreed[1]}" if agreed else "—")
+            disputes.extend(disputes_of(r["run_id"], None, per, case, common,
+                                        T["report.md_dispute_trap"].format(run=r["run_id"])))
+        cost, secs = _mean_cost_time(reps)
+        out.append(f"| {key[0]} | {key[1]} | {key[2]} | {' · '.join(str(r['tests']['passed']) for r in reps)} | "
+                   f"{' · '.join(traps)} | {' · '.join(items)} | {cost} | {secs}s |")
+    timed = timed_out_groups(case_id, rows)
+    for key in sorted(timed, key=lambda k: (k[1], effort_order.index(k[2]), k[3])):
+        reps, size = timed[key]
+        cost, secs = _mean_cost_time(reps)
+        label = T["report.timed_out"].format(n=len(reps), m=size)
+        out.append(f"| {key[1]} | {key[2]} | {key[3]} ({label}) | "
+                   f"{' · '.join(str(r['tests']['passed']) for r in reps)} | — | — | {cost} | {secs}s |")
+    notes = discrimination_notes(case_id, case, case_rows) if case_rows else []
+    return out + ([""] + notes if notes else [])
+
+
+def _markdown_plan_table(case, case_rows, common, disputes, effort_order, mark):
+    out = ["| " + " | ".join(T["report.plan_columns"]) + " |",
+           "|---|---|---|---|---|---|---|---|---|"]
+    for r in sorted(case_rows, key=lambda r: (r["model"], effort_order.index(r["effort"]), r["mode"])):
+        cells = []
+        for target in ("draft", "final"):
+            per = r["scores"].get(target) or (r["scores"].get("final") if r["mode"] != "review" else {}) or {}
+            d, t = _verdict(per)
+            _, agreed, _ = agreement(per) if per else (None, None, [])
+            cells += [f"{mark[d]}/{mark[t]}", f"{agreed[0]}/{agreed[1]}" if agreed else "—"]
+            if r["mode"] == "review" or target == "draft":
+                disputes.extend(disputes_of(r["run_id"], target, per, case, common,
+                                            T["report.md_dispute_target_trap"].format(run=r["run_id"], target=target)))
+        if r["mode"] != "review":
+            cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
+        cost = r.get("chain_cost_usd")
+        out.append(f"| {r['model']} | {r['effort']} | {r['mode']} | {' | '.join(cells)} | "
+                   f"{'$%.2f' % cost if cost is not None else '?'} | {r.get('elapsed_s') or '?'}s |")
+    return out
+
+
+def render_impl_case(case_id, case, rows, all_rows=(), common=None, level="h2"):
+    """One table per implementation case: each arm's repeats side by side, then their mean.
+
+    Timed-out runs of an arm follow as their own row; they stay invalid but keep their tests.
+    """
     esc = html.escape
     effort_order = ["medium", "high", "xhigh", "max", "ultra"]
+    mark = {True: "✓", False: "✗", None: "?"}
     groups = {}
     for r in rows:
         groups.setdefault((r["candidate"], r["model"], r["effort"], r["mode"]), []).append(r)
     disputes = []
-    out = [f"<h2>{esc(case_id)} · {esc(case['title'])}</h2>"
+    out = [f"<{level}>{esc(case_id)} · {esc(case['title'])}</{level}>"
            "<p class='lede'>" + T["report.impl_lede"].format(expected=case["hidden_tests"]["expected"],
                                                               baseline=case["hidden_tests"].get("baseline", "?"))
            + "</p><div class='scroll'><table><thead><tr>"
@@ -2586,71 +2765,90 @@ def render_impl_case(case_id, case, rows):
             trap, items, disputed = agreement(per) if per else (None, None, [])
             dirs = [s.get("direction") for s in per.values()]
             direction = True if dirs and all(dirs) else (False if dirs and not any(dirs) else None)
-            mark = {True: "✓", False: "✗", None: "?"}
             traps.append(f"{mark[direction]}/{mark[trap]}")
             items_txt.append(f"{items[0]}/{items[1]}" if items else "—")
-            if disputed:
-                disputes.append(f"{r['run_id']}: {', '.join(disputed)}")
-            if per and (trap is None or direction is None):
-                disputes.append(T["report.html_dispute_trap"].format(run=r["run_id"]))
-        costs = [r["chain_cost_usd"] for r in reps if r.get("chain_cost_usd") is not None]
-        secs = [r["elapsed_s"] for r in reps if r.get("elapsed_s")]
+            disputes.extend(disputes_of(r["run_id"], None, per, case, common,
+                                        T["report.html_dispute_trap"].format(run=r["run_id"])))
+        cost, secs = _mean_cost_time(reps)
         diff_txt = " · ".join(f"+{r['diff']['added']}/-{r['diff']['deleted']}" for r in reps)
         out.append(f"<tr><td>{esc(key[1])}</td><td>{esc(key[2])}</td><td>{esc(key[3])}</td>"
                    f"<td class='num'>{tests_txt}</td><td class='num'>{sum(rates) / len(rates):.0%}</td>"
                    f"<td>{' · '.join(traps)}</td><td>{' · '.join(items_txt)}</td><td class='num'>{diff_txt}</td>"
-                   f"<td class='num'>{'$%.2f' % (sum(costs) / len(costs)) if costs else '?'}</td>"
-                   f"<td class='num'>{int(sum(secs) / len(secs)) if secs else '?'}s</td></tr>")
+                   f"<td class='num'>{cost}</td><td class='num'>{secs}s</td></tr>")
+    timed = timed_out_groups(case_id, all_rows)
+    for key in sorted(timed, key=lambda k: (k[0], effort_order.index(k[2]), k[3])):
+        reps, size = timed[key]
+        cost, secs = _mean_cost_time(reps)
+        rates = [r["tests"].get("pass_rate") or 0.0 for r in reps]
+        diff_txt = " · ".join(f"+{r['diff']['added']}/-{r['diff']['deleted']}" for r in reps if r.get("diff"))
+        label = T["report.timed_out"].format(n=len(reps), m=size)
+        out.append(f"<tr class='muted'><td>{esc(key[1])}</td><td>{esc(key[2])}</td>"
+                   f"<td>{esc(key[3])} <span class='warn'>{esc(label)}</span></td>"
+                   f"<td class='num'>{' · '.join(str(r['tests']['passed']) for r in reps)}</td>"
+                   f"<td class='num'>{sum(rates) / len(rates):.0%}</td><td>—</td><td>—</td>"
+                   f"<td class='num'>{diff_txt}</td><td class='num'>{cost}</td><td class='num'>{secs}s</td></tr>")
     out.append("</tbody></table></div>")
+    notes = discrimination_notes(case_id, case, rows) if rows else []
+    out += [f"<p class='lede'>{esc(n)}</p>" for n in notes]
     return "".join(out), disputes
 
 
-def render_report(batch, rows, cases, arms):
+def render_report(batch, rows, cases, arms, common=None):
     esc = html.escape
     valid = [r for r in rows if r["status"] == "valid"]
     invalid = [r for r in rows if r["status"] != "valid"]
     effort_order = ["medium", "high", "xhigh", "max", "ultra"]
     body = []
     disputes = []
-    for case_id, case in cases.items():
-        if is_impl(case):
-            html_part, case_disputes = render_impl_case(case_id, case, [r for r in valid if r["case"] == case_id])
-            body.append(html_part)
-            disputes += case_disputes
-            continue
-        body.append(f"<h2>{esc(case_id)} · {esc(case['title'])}</h2><div class='scroll'><table><thead><tr>"
-                    + "".join(f"<th>{c}</th>" for c in T["report.plan_columns"]) + "</tr></thead><tbody>")
-        case_rows = sorted([r for r in valid if r["case"] == case_id],
-                           key=lambda r: (r["candidate"], effort_order.index(r["effort"]), r["mode"]))
-        for r in case_rows:
-            cells = []
-            for target in ("draft", "final"):
-                per = r["scores"].get(target) or ({} if target == "draft" else {})
-                if target == "draft" and r["mode"] == "solo":
-                    per = r["scores"].get("final", {})
-                trap, items, disputed = agreement(per) if per else (None, None, [])
-                trap_txt = {True: f"<span class='ok'>{T['report.pass']}</span>",
-                            False: f"<span class='bad'>{T['report.fail']}</span>",
-                            None: f"<span class='warn'>{T['report.split_unjudged']}</span>"}[trap]
-                item_txt = f"{items[0]}/{items[1]}" if items else "—"
-                if disputed:
-                    item_txt += f" <span class='warn'>{T['report.split_items'].format(ids=','.join(disputed))}</span>"
-                    disputes.append(f"{r['run_id']} {target}: {', '.join(disputed)}")
-                if trap is None and per:
-                    disputes.append(T["report.html_dispute_target_trap"].format(run=r["run_id"], target=target))
-                cells += [trap_txt, item_txt]
-            if r["mode"] == "solo":
-                cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
-            cost = r.get("chain_cost_usd")
-            body.append(f"<tr><td>{esc(r['model'])}</td><td>{esc(r['effort'])}</td><td>{esc(r['mode'])}</td>"
-                        + "".join(f"<td>{c}</td>" for c in cells)
-                        + f"<td class='num'>{'$%.2f' % cost if cost is not None else '?'}</td>"
-                        f"<td class='num'>{r.get('elapsed_s') or '?'}s</td></tr>")
-        body.append("</tbody></table></div>")
+    ranking, baseline = case_order(cases)
+    for section, level in ((ranking, "h2"), (baseline, "h3")):
+        if section is baseline and section:
+            body.append(f"<h2>{T['report.baseline_heading']}</h2><p class='lede'>{T['report.baseline_note']}</p>")
+        for case_id, case in section:
+            if is_impl(case):
+                html_part, case_disputes = render_impl_case(case_id, case, [r for r in valid if r["case"] == case_id],
+                                                            rows, common, level)
+                body.append(html_part)
+                disputes += case_disputes
+                continue
+            body.append(f"<{level}>{esc(case_id)} · {esc(case['title'])}</{level}><div class='scroll'><table><thead><tr>"
+                        + "".join(f"<th>{c}</th>" for c in T["report.plan_columns"]) + "</tr></thead><tbody>")
+            case_rows = sorted([r for r in valid if r["case"] == case_id],
+                               key=lambda r: (r["candidate"], effort_order.index(r["effort"]), r["mode"]))
+            for r in case_rows:
+                cells = []
+                for target in ("draft", "final"):
+                    per = r["scores"].get(target) or ({} if target == "draft" else {})
+                    if target == "draft" and r["mode"] == "solo":
+                        per = r["scores"].get("final", {})
+                    trap, items, disputed = agreement(per) if per else (None, None, [])
+                    trap_txt = {True: f"<span class='ok'>{T['report.pass']}</span>",
+                                False: f"<span class='bad'>{T['report.fail']}</span>",
+                                None: f"<span class='warn'>{T['report.split_unjudged']}</span>"}[trap]
+                    item_txt = f"{items[0]}/{items[1]}" if items else "—"
+                    if disputed:
+                        item_txt += f" <span class='warn'>{T['report.split_items'].format(ids=','.join(disputed))}</span>"
+                    if r["mode"] != "solo" or target == "draft":
+                        disputes.extend(disputes_of(r["run_id"], target, per, case, common,
+                                                    T["report.html_dispute_target_trap"].format(run=r["run_id"],
+                                                                                                target=target)))
+                    cells += [trap_txt, item_txt]
+                if r["mode"] == "solo":
+                    cells[2:4] = [T["report.same_as_draft"], T["report.same_as_draft"]]
+                cost = r.get("chain_cost_usd")
+                body.append(f"<tr><td>{esc(r['model'])}</td><td>{esc(r['effort'])}</td><td>{esc(r['mode'])}</td>"
+                            + "".join(f"<td>{c}</td>" for c in cells)
+                            + f"<td class='num'>{'$%.2f' % cost if cost is not None else '?'}</td>"
+                            f"<td class='num'>{r.get('elapsed_s') or '?'}s</td></tr>")
+            body.append("</tbody></table></div>")
     none = f"<li>{T['report.none']}</li>"
     inv = "".join(f"<li><code>{esc(r['run_id'])}</code>{T['report.html_invalid_sep']}{esc('; '.join(r.get('reasons') or []))}</li>"
                   for r in invalid) or none
-    dis = "".join(f"<li>{esc(d)}</li>" for d in disputes) or none
+    dis = "".join(f"<li>{esc(head)}<ul>{''.join(f'<li>{esc(v)}</li>' for v in verdicts)}</ul></li>"
+                  for head, verdicts in disputes) or none
+    invalid_cost = spend(rows) - spend(valid)
+    cost_note = (f"<p class='lede'>{esc(T['report.invalid_cost'].format(cost=invalid_cost))}</p>"
+                 if invalid and invalid_cost > 0.005 else "")
     return f"""<title>{T['report.title'].format(batch=esc(batch))}</title>
 <style>
 :root{{--bg:#f6f7f9;--fg:#1b2130;--muted:#5d6577;--line:#dfe2e8;--ok:#1f7a4d;--bad:#a3303a;--warn:#9a5b00;--card:#fff}}
@@ -2661,11 +2859,12 @@ body{{background:var(--bg);color:var(--fg);font-family:{T['report.font']};line-h
 .scroll{{overflow-x:auto}} table{{border-collapse:collapse;width:100%;background:var(--card);font-size:14px}}
 th,td{{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}}
 .num{{font-variant-numeric:tabular-nums;text-align:right}} .ok{{color:var(--ok)}} .bad{{color:var(--bad)}} .warn{{color:var(--warn)}}
-.lede{{color:var(--muted);max-width:75ch}}
+.lede{{color:var(--muted);max-width:75ch;overflow-wrap:anywhere}} tr.muted td{{color:var(--muted)}}
 </style>
 <div class="wrap">
 <h1>{T['report.heading'].format(batch=esc(batch))}</h1>
 <p class="lede">{T['report.lede'].format(valid=len(valid), invalid=len(invalid))}</p>
+{cost_note}
 {''.join(body)}
 <h2>{T['report.disputes']}</h2><ul>{dis}</ul>
 <h2>{T['report.invalid']}</h2><ul>{inv}</ul>
@@ -2689,7 +2888,8 @@ def main(argv=None):
     run.add_argument("--efforts", type=csv)
     run.add_argument("--modes", type=csv)
     run.add_argument("--parallel", type=int, default=4)
-    run.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    run.add_argument("--timeout", type=int, help=f"seconds per candidate stage (default: implement.timeouts by effort "
+                                                 f"for implementers, else {DEFAULT_TIMEOUT})")
     run.add_argument("--rerun", action="store_true", help="rerun runs that are already valid")
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--repeats", type=int, help="repeats per arm (implementation default implement.repeats; planning default one run, ids without -rN)")
@@ -2712,7 +2912,7 @@ def main(argv=None):
     ado.add_argument("--efforts", type=csv)
     ado.add_argument("--repeats", type=int, default=1)
     ado.add_argument("--parallel", type=int, default=4)
-    ado.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
+    ado.add_argument("--timeout", type=int, help=f"seconds per candidate stage (default {DEFAULT_TIMEOUT})")
     ado.add_argument("--dry-run", action="store_true")
     ado.set_defaults(func=cmd_adopt)
 
