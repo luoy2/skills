@@ -55,17 +55,23 @@ which one it is before starting work, as a single question.
    existing line.
 4. **Questions are for main-line decisions and urgent items only.** A question
    about a parked item waits for the review.
-5. **End each reply with one next step on the main line**, then `side +N`, the
-   number of items parked in this reply. Do not list parked items at the end
-   of a reply.
+5. **End each reply with one next step on the main line**, then
+   `side +N · open M`: N items parked in this reply, M items still open in the
+   store after it. The marker never reads as an empty queue while items stay
+   open. Do not list parked items at the end of a reply.
 6. **The owner's own new idea is not parked.** Do what they ask, and record the
    switch: pause the main line with the reason (`paused for: …`). When the
    detour is done, say so and resume the main line, or ask which line is now
    the main one if the detour grew.
-7. **Review in batches.** When the owner asks to see the parked items ("review
-   side lines", "看支线"), group them by area. For each group, write a short
-   plan: what to do, in what order, and what the owner must decide. Do this
-   before any fix. Ask the decisions together, then let the owner pick what
+7. **Review in batches, with a questionnaire.** Any question from the owner
+   about parked items starts a review ("review side lines", "看支线", "which
+   ones are they", "有哪几条"). Group them by area; for each group write a
+   short plan: what to do, in what order, what the owner must decide. In the
+   same reply, before any fix, send the questionnaire (the client's question
+   tool): one question per item or group, the recommended action first, the
+   other real choices, and always a "later" option ("以后再说"). An item
+   answered "later" or left unanswered stays in the store unchanged; only an
+   item the owner ruled on leaves it (rule 8). Then let the owner pick what
    becomes the next main line.
 8. **Clear handled items.** An item is handled once it is filed as a ticket,
    scheduled at a time, done, or dropped by the owner; a filed ticket counts as
