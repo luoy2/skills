@@ -453,3 +453,34 @@ def test_an_implementer_timeout_follows_its_effort_unless_given(kit):
     assert kit.impl_timeout(impl, "max") == 7200
     assert kit.impl_timeout(impl, "high") == kit.DEFAULT_TIMEOUT
     assert kit.impl_timeout(impl, "max", 900) == 900
+
+
+def test_the_review_page_carries_each_case_its_lint_and_its_pass_clauses(tmp_path, monkeypatch):
+    """The owner reads the case checks where they review the case, not in a terminal they never see."""
+    import sys
+    skill = REPO_ROOT / "skills" / "engineering" / "agent-eval"
+    config = json.loads((skill / "assets" / "config.example.json").read_text(encoding="utf-8"))
+    cases = tmp_path / "cases"
+    (cases / "A").mkdir(parents=True)
+    (cases / "common.json").write_text(json.dumps({"rubric": [{"id": "C1", "text": "no side effects", "evidence": "t",
+                                                               "kinds": ["plan"]}], "suffix": "s"}), encoding="utf-8")
+    case = {"id": "A", "title": "placement", "snapshot": "0" * 40, "background": ["machine directories stay"],
+            "owner_messages": ["m"], "rubric": [], "equivalents": "",
+            "trap": {"description": "d", "direction": "dir", "wrong_markers": ["stay"],
+                     "pass": [{"text": "names the migration source", "checked_by": ["C1", "R7"]}]}}
+    (cases / "A" / "case.json").write_text(json.dumps(case), encoding="utf-8")
+    config.update({"repo": str(tmp_path), "cases_dir": str(cases), "results_dir": str(tmp_path / "results")})
+    (tmp_path / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("review_page_under_test", skill / "scripts" / "review_page.py")
+    page_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(page_mod)
+    monkeypatch.setattr(sys, "argv", ["review_page.py", "--config", str(tmp_path / "config.json"),
+                                      "--out", str(tmp_path / "review.html")])
+    page_mod.main()
+    page = (tmp_path / "review.html").read_text(encoding="utf-8")
+    data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst esc", 1)[0])
+    (row,) = data["cases"]
+    assert [f["value"] for f in row["lint"]["errors"]] == ["R7"]
+    assert [f["where"] for f in row["lint"]["warnings"]] == ["background:1"]
+    assert data["lint_labels"]["checked_by"].startswith("a trap.pass clause")
+    assert "function passRows" in page and "%%" not in page

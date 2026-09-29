@@ -61,6 +61,10 @@ ol,ul{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
 .trap{border-left:3px solid var(--bad);padding-left:12px}
 .pass{border-left:3px solid var(--good);padding-left:12px}
 .leak li{font-size:14px}
+.lint{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.lint .err{color:var(--bad)} .lint .wrn{color:var(--warn)}
+.lint .where{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.doc{white-space:pre-wrap;font-size:13px;color:var(--muted);margin:2px 0 6px}
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
 .bar-in{max-width:940px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
 .count{font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);flex:1;min-width:200px}
@@ -89,6 +93,23 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const STORE='review:'+DATA.key;
 let state={};try{state=JSON.parse(localStorage.getItem(STORE)||'{}')}catch(e){}
 const save=()=>{try{localStorage.setItem(STORE,JSON.stringify(state))}catch(e){}};
+const kindsNote=r=>r.kinds?` (%%casepage.kinds%%${r.kinds.join('%%casepage.list_sep%%')})`:'';
+function lintHTML(c){
+  if(c.lint_error)return `<div class="block lint"><h3>%%casepage.lint_heading%%</h3><p class="err">%%casepage.lint_failed%%${esc(c.lint_error)}</p></div>`;
+  const L=c.lint;if(!L)return '';
+  const row=(f,cls,level)=>`<div><b class="${cls}">${esc(level)}</b> ${esc(DATA.lint_labels[f.check]||f.check)}${f.value?`: <code>${esc(f.value)}</code>`:''} <span class="where">${esc(f.where)}</span></div>`;
+  const docs=(L.docstrings||[]).map(d=>`<div><code>${esc(d.test)}</code> <span class="where">${esc(d.where)} · ${esc(d.names.join('%%casepage.list_sep%%'))}</span><p class="doc">${esc(d.docstring)}</p></div>`).join('');
+  const any=L.errors.length||L.warnings.length;
+  return `<div class="block lint"><h3>%%casepage.lint_heading%%</h3>
+    ${L.errors.map(f=>row(f,'err',DATA.lint_labels.error)).join('')}${L.warnings.map(f=>row(f,'wrn',DATA.lint_labels.warning)).join('')}
+    ${any?'':`<p>${esc(DATA.lint_labels.clean)}</p>`}
+    ${docs?`<p>${esc(DATA.lint_labels.docstrings)}</p>${docs}`:''}</div>`;
+}
+function passRows(c,trap){
+  if(!Array.isArray(trap.pass))return itemRow(c.id+"-pass","%%casepage.pass%%",trap.pass,"");
+  return trap.pass.map((cl,i)=>itemRow(`${c.id}-pass-${i+1}`,`%%casepage.pass%% (${i+1})`,cl.text,
+    (cl.checked_by&&cl.checked_by.length)?"%%casepage.checked_by%%"+cl.checked_by.join('%%casepage.list_sep%%'):"%%casepage.unchecked%%")).join('');
+}
 function itemRow(key,tag,text,ev){
   const s=state[key]||{v:"",n:""};
   const opt=(v,l)=>`<label><input type="radio" name="${key}" value="${v}" ${s.v===v?'checked':''}><span>${l}</span></label>`;
@@ -102,6 +123,7 @@ function caseHTML(c){
   const trap=c.trap||{};
   return `<section class="case" id="case-${c.id}" role="tabpanel">
   <div class="case-head"><h2>${esc(c.id)} · ${esc(c.title)}</h2><p class="lede">${esc(c.source||'')}</p></div>
+  ${c.role==='baseline'?`<div class="alert">%%casepage.role_baseline%%</div>`:''}
   <div class="facts"><div><b>%%casepage.snapshot%%</b><span class="mono">${esc((c.snapshot||'').slice(0,12))}</span><br><span style="color:var(--muted);font-size:13px">${esc(c.snapshot_evidence||'')}</span></div>
   <div><b>%%casepage.attachments%%</b>${esc(atts)}</div></div>
   <div class="block"><h3>%%casepage.prompt_heading%%</h3><pre class="prompt">${esc(c.prompt)}</pre>
@@ -109,20 +131,24 @@ function caseHTML(c){
   ${c.hidden_tests?`<div class="block"><h3>%%casepage.impl_heading%%</h3>
     <p style="font-size:14px"><b>%%casepage.modes%%</b>%%casepage.label_gap%%${esc((c.modes||DATA.impl_modes||[]).join('%%casepage.list_sep%%'))}</p>
     <p style="font-size:14px"><b>%%casepage.hidden%%</b>%%casepage.hidden_where%%${c.hidden_tests.files.map(f=>`<code>${esc(f.place)}</code>`).join('%%casepage.list_sep%%')}%%casepage.hidden_count_before%%${c.hidden_tests.expected}%%casepage.hidden_count_after%%${esc(c.hidden_tests.calibration_note||'')}</p>
+    ${(c.hidden_tests.reference_only||[]).length?`<p style="font-size:14px"><b>%%casepage.reference_only%%</b>${c.hidden_tests.reference_only.map(t=>`<code>${esc(t)}</code>`).join('%%casepage.list_sep%%')}</p>`:''}
+    ${(c.alt_patches||[]).length?`<p style="font-size:14px"><b>%%casepage.alt_patches%%</b></p><ul>${c.alt_patches.map(a=>`<li><code>${esc(a.file)}</code> ${esc(a.note||'')}${Object.keys(a.accepted_failures||{}).length?`<br><span style="color:var(--muted);font-size:13px">%%casepage.accepted_failures%%${Object.entries(a.accepted_failures).map(([t,why])=>`${esc(t)}: ${esc(why)}`).join('%%casepage.item_sep%%')}</span>`:''}</li>`).join('')}</ul>`:''}
     ${itemRow(c.id+"-tests","%%casepage.hidden%%","%%casepage.tests_check%%","")}</div>`:''}
   <div class="block"><h3>%%casepage.trap_heading%%</h3>
     <p class="trap"><b>%%casepage.mistake%%</b>%%casepage.label_gap%%${esc(trap.description)}</p>
     ${trap.direction?itemRow(c.id+"-direction","%%casepage.direction%%",trap.direction,""):''}
-    ${itemRow(c.id+"-pass","%%casepage.pass%%",trap.pass,"")}</div>
+    ${passRows(c,trap)}
+    ${(trap.wrong_markers||[]).length?`<p style="font-size:14px"><b>%%casepage.wrong_markers%%</b>%%casepage.label_gap%%${trap.wrong_markers.map(m=>`<code>${esc(m)}</code>`).join('%%casepage.list_sep%%')}</p>`:''}</div>
   <div class="block"><h3>%%casepage.rubric_heading%%</h3>
-    ${(c.rubric||[]).map(r=>itemRow(c.id+"-"+r.id,r.id,r.text,r.evidence)).join('')}
+    ${(c.rubric||[]).map(r=>itemRow(c.id+"-"+r.id,r.id,r.text+kindsNote(r),r.evidence)).join('')}
     <p style="font-size:14px"><b>%%casepage.equivalents%%</b>%%casepage.label_gap%%${esc(c.equivalents||'')}</p></div>
   ${c.ask?`<div class="alert"><b>%%casepage.ask%%</b>%%casepage.label_gap%%${esc(c.ask)}<div style="margin-top:8px">${itemRow(c.id+"-ask","%%casepage.answer%%","%%casepage.answer_hint%%","")}</div></div>`:''}
   <div class="block leak"><h3>%%casepage.leak_heading%%</h3><ul>${(c.leak_markers||[]).map(l=>`<li><code>${esc(l)}</code></li>`).join('')}</ul></div>
+  ${lintHTML(c)}
 </section>`;
 }
 const common=`<section class="case" id="case-_common" role="tabpanel"><div class="case-head"><h2>%%casepage.shared%%</h2></div>
-  <div class="block">${(DATA.common.rubric||[]).map(r=>itemRow("common-"+r.id,r.id,r.text,r.evidence)).join('')}</div></section>`;
+  <div class="block">${(DATA.common.rubric||[]).map(r=>itemRow("common-"+r.id,r.id,r.text+kindsNote(r),r.evidence)).join('')}</div></section>`;
 const main=document.getElementById('cases'),tabs=document.getElementById('tabs');
 const panels=[...DATA.cases.map(c=>({id:c.id,label:c.id+" · "+c.title,html:caseHTML(c)})),{id:"_common",label:"%%casepage.shared%%",html:common}];
 main.innerHTML=panels.map(p=>p.html).join('');
