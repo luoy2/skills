@@ -56,7 +56,12 @@ output is not measuring the model.
   - `sandbox-exec` (macOS): an SBPL profile denying `file-read-data` and writes
     under `/Users`, `/Volumes`, `/private/tmp`. Deny content reads, not all reads:
     Codex canonicalizes CODEX_HOME at start and aborts if it cannot stat parent
-    directories.
+    directories. Local services are closed too: every unix socket but the resolver's,
+    every Mach service but the four Codex needs (preferences, certificate trust;
+    `SBPL_MACH_SERVICES`), preference reads through them, Apple events and app
+    launches. A new CLI version that fails at start inside the sandbox but not
+    outside it usually wants one more Mach service: remove one service at a time
+    from a wider list to find it, and deny what it would expose.
   - `bwrap` (Linux): the host tree read-only, an empty tmpfs over each deny root
     (`/home`, `/root`, `/mnt`, `/media`, `/nas`, `/srv`, `/tmp`, `/var/tmp`, `/run`;
     a file root such as a service socket is covered by `/dev/null`), `allow_read`

@@ -33,3 +33,4 @@
 | Judge disputes were listed by run id only | The owner could not see which clause the judges read differently | Dispute list with item text and each judge's evidence |
 | Cases were run because each judge failed the negative and the reference passed | All five cases measured the wrong thing | The calibration gate: `run` needs passing judge and test records of the current case digest |
 | A launcher started the same batch twice, seven seconds apart | Every run appeared twice in the ledger; runs recorded as valid scored the bare snapshot's 2/42 | `run` and the other batch writers lock the batch directory; a second writer is refused |
+| The macOS profile was `allow default` apart from files | A candidate could reach Docker's socket, the pasteboard, every app's preferences, and `open` an app that then ran unsandboxed | Unix sockets, Mach services, preference reads, Apple events and app launches denied; four Mach services allowed, each measured |

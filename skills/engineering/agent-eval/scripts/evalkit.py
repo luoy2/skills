@@ -613,12 +613,26 @@ def write_codex_home(home, client="gateway"):
     )
 
 
+# The Mach services a sandboxed Codex cannot start without (0.159, measured 2026-09-30 by
+# removing one service at a time): preferences (it fails "Failed to synchronize managed
+# preferences" without them) and certificate trust. Preference reads through them are denied
+# per domain; the login keychain stays unreadable because its file is under a deny root.
+SBPL_MACH_SERVICES = ("com.apple.cfprefsd.daemon", "com.apple.cfprefsd.agent",
+                      "com.apple.trustd.agent", "com.apple.SecurityServer")
+
+
 def sandbox_profile(root):
-    """Deny reading contents of, and writing to, user data, mounts and every other temp tree.
+    """Deny reading contents of, and writing to, user data, mounts and every other temp tree,
+    and every local service: unix sockets, Mach services and app launches.
 
     Metadata stays readable: Codex canonicalizes CODEX_HOME at start, which stats each
     parent under /private/tmp, and denying that aborts it before the first request
     (measured 2026-09-23). Listing a directory or reading a file is content and stays denied.
+    Under `allow default` alone a candidate could connect to any unix socket (Docker's
+    among them), read the pasteboard and every app's preferences, and `open` an app, which
+    then runs outside the sandbox (measured 2026-09-30). Only the resolver's socket stays
+    open, since the network is shared by design, and only the Mach services in
+    SBPL_MACH_SERVICES.
     """
     root = os.path.realpath(root)
     extra = "".join(f'(allow file-read-data ({"subpath" if os.path.isdir(p) else "literal"} "{p}"))\n'
@@ -629,6 +643,10 @@ def sandbox_profile(root):
         f'(allow file-read-data file-write* (subpath "{root}"))\n' + extra +
         f'(deny file-write* (require-not (require-any (subpath "{root}") '
         '(subpath "/private/var/folders") (subpath "/dev"))))\n'
+        "(deny network-outbound (remote unix-socket))\n"
+        '(allow network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))\n'
+        "(deny mach-lookup)\n(allow mach-lookup " + " ".join(f'(global-name "{n}")' for n in SBPL_MACH_SERVICES) + ")\n"
+        "(deny user-preference-read user-preference-write)\n(deny appleevent-send)\n(deny lsopen)\n"
     )
 
 
