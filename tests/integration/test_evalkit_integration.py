@@ -1,12 +1,15 @@
-"""agent-eval runner cases that build a git repository: the diff the judges read, the
-instruction overlay inside the snapshot commit, and the shared plan's marker scan. They start
-git, so they live under tests/integration/; tests/test_evalkit.py states what each piece guards.
+"""agent-eval runner cases that start another process: the diff the judges read, the
+instruction overlay inside the snapshot commit and the shared plan's marker scan (git), and the
+batch lock (a second process holding it). tests/test_evalkit.py states what each piece guards.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -105,3 +108,32 @@ def test_a_shared_plan_is_not_leak_checked_but_its_marker_hits_are_recorded(kit,
     assert "test_fix_name" not in seen["prompt"]
     assert rec["plan_marker_hits"] == ["test_fix_name"]
     assert rec["reasons"] == ["isolation: stopped by the test"]
+
+
+def test_a_second_writer_of_a_batch_is_refused_until_the_first_exits(kit, monkeypatch, tmp_path, capsys):
+    """Two `run`s of one batch share its run directories: the second must not start."""
+    monkeypatch.setattr(kit, "RESULTS", tmp_path)
+    holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import importlib.util, pathlib, sys
+        spec = importlib.util.spec_from_file_location("k", {str(KIT_PATH)!r})
+        k = importlib.util.module_from_spec(spec); spec.loader.exec_module(k)
+        k.RESULTS = pathlib.Path({str(tmp_path)!r})
+        fh = k.hold_batch("b"); print("held", flush=True); sys.stdin.readline()
+        """)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        with pytest.raises(kit.EvalError, match=r"batch b is being written by pid \d+"):
+            kit.hold_batch("b")
+        kit.hold_batch("other").close()  # another batch is free
+        config = json.loads((KIT_PATH.parents[1] / "assets" / "config.example.json").read_text(encoding="utf-8"))
+        config.update({"repo": str(tmp_path), "cases_dir": str(tmp_path / "cases"), "results_dir": str(tmp_path)})
+        (tmp_path / "config.json").write_text(json.dumps(config), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("evalkit_cli_under_test", KIT_PATH)
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        assert cli.main(["--config", str(tmp_path / "config.json"), "judge", "--batch", "b"]) == 2
+        assert "is being written by pid" in capsys.readouterr().err
+    finally:
+        holder.communicate("\n", timeout=30)
+    kit.hold_batch("b").close()  # the lock left with the process
+
