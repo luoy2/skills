@@ -7,8 +7,8 @@ Two skills learn from your own session history, on your own computer, to help
 you work better with Claude Code: `agent-eval` finds which model and thinking
 effort avoid the mistakes your agents actually made, and `questionnaire-review`
 turns the way you answer your agents into rules they follow. The third,
-`i-have-ocd`, keeps you and your agents on one main line: findings off that line
-are written down instead of fixed or asked about on the spot.
+`i-have-ocd`, keeps the current task focused: consequential findings retain
+a responsible owner, and the human sees only unresolved decisions.
 
 Your session logs stay on your computer, and nothing is sent to me: the plugin
 has no server, account or telemetry. What leaves your computer is only what a
@@ -147,30 +147,22 @@ Requirements: Claude Code, Python 3.11+ or [uv](https://docs.astral.sh/uv/),
 
 ## i-have-ocd
 
-Some people can't leave a small defect alone; they want it fixed the moment they
-see it. Agents feed that urge by reporting every finding and asking about it
-right away. Each detour looks cheap. Together they scatter your attention, and
-work that should have been planned together gets done piecemeal. `i-have-ocd`
-keeps one main line: a title, a done-when criterion and the next step.
+Keep the current task moving without making the human manage engineering
+ownership. Each session has its own main line. Consequential findings keep a
+responsible owner and a durable record; existing work is linked rather than
+queued again. Responsibility, delivery, human decisions and completion have
+separate states. A handoff or an ACK never answers a human question.
 
-- Every new item is sorted as main line, urgent, or parked.
-- Urgent means money or position risk, a production incident, a leaked
-  credential, or an identity check.
-- A parked item is written down in one line: what it is, why it matters and
-  where it was seen. It is not fixed or asked about on the spot.
-- Questions are only about main-line decisions.
-- Each reply ends with one next step and a `side +N` count.
-- Your own new ideas are done right away, and the main line is recorded as
-  paused.
-- When you ask for a review, parked items are grouped and planned in batches,
-  and the decisions come as one set of questions.
+An explicitly requested review presents at most four independent decisions
+across all lanes. Answers and resume do not start another batch. A real “later”
+answer has an event-based reopening condition. Urgent risks are raised immediately.
+Routine replies carry no global backlog count.
 
-It keeps its state in focus tools if your session has them, for example an MCP
-server shared by all your machines. Otherwise its helper, `scripts/ocd.py`, is
-the only writer: one SQLite store per project in `~/.local/state/i-have-ocd/`,
-shared by the sessions and worktrees on that machine, where each parked item
-keeps one id and closes only with a receipt. `<project>.md` beside it is a
-generated view that nobody edits. It reads no logs and sends nothing.
+The standard-library helper keeps one SQLite store per project on this machine,
+shared by its sessions and worktrees. It reads no logs and sends nothing.
+Markdown is a read-only generated view. Format 1 stores require an explicit,
+mapped migration with history and a SQLite backup. This release supports only
+the local backend; shared backend requests return an unsupported error.
 Start with `skills/engineering/i-have-ocd/SKILL.md`.
 
 ## What it reads and where it sends data
