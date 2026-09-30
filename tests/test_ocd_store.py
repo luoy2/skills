@@ -1,57 +1,14 @@
-"""i-have-ocd store: the contract that lets several sessions on one machine share a queue.
-
-On 2026-09-29 a session asked the owner about an item another session had removed 18 minutes
-earlier, from a read made before the removal: every session rewrote one Markdown file whole,
-items had no identity, and closing left no receipt. These cases hold the helper to what fixes
-that: ids that never change or repeat, two concerns on one ticket kept apart, versioned and
-retry-safe changes, leases a stale holder cannot write through, receipts for every close,
-closed items that stay closed, a store that fails loudly instead of reading as empty, the first
-import from the real store's shape, and hand edits of the view from sessions still on the old
-skill. Cases that start a process live in tests/integration/test_ocd_store_integration.py.
-"""
-
-from __future__ import annotations
-
-import hashlib
+"""Single-process contract tests with neutral data. Process tests live in integration/."""
+import copy
 import importlib.util
 import json
-import re
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "skills" / "engineering" / "i-have-ocd" / "scripts" / "ocd.py"
-
-# Shaped like a real hand-written store (long main-line bullets, a key with a parenthesis, Chinese
-# text, two concerns on one ticket, a line written twice); the content is invented.
-LONG_NEXT_STEP = ("#401/#405/#445 merged + #447 fix (0d692e1, on the staging branch; CI run 1234 pending). "
-                  "Refund thresholds rebased to the net amount ex-fees, owner-approved; the 09:14 job carries the "
-                  "new sha. " * 12).strip()
-LEGACY = f"""# shop — i-have-ocd store (this machine only until the shared focus server ships)
-
-## Main line
-- title: Checkout v2 (EU storefront) onto the new payments tenant — M-3a
-- done-when: roadmap v1.4 M-3 card, gate G3a (docs/milestones/m-3-payments.md); rulings in #412 comment 9001
-- next step (2026-09-28 22:50 ET): {LONG_NEXT_STEP}
-- open main-line decision (owner, 09-28): #418 — add a second API user or keep one service user. Waiting for reply.
-- ruled 2026-09-27 (questionnaire): API credentials come from the secret store (field by field, hash-checked)
-- 3a input: verify the webhook's real retry cadence before designing the 3a coordination
-- session: checkout main-line session s-17 (mesh s-abc123), took over 2026-09-27 19:36 ET
-- set: 2026-09-27 by owner ("我其实想现在先管这个结账的事情")
-
-## Parked
-- #433（固定批量受预算约束）两个待裁点：机主 09-29 让问设计负责人，消息已发（对方离线排队）。
-- [open] after the docs rename PR lands, add two docs to the alias scan in tests/test_aliases.py (#440).
-- #445 判据 3 旁支：订单 `_revoke` 对 PRE_SUBMIT 的出场直接转 EXPIRED，不开 exit_unfilled 事项。
-- #445 告警缺口：硬约束撤销的出场同样没人被叫，要不要补由机主裁。
-- 包装器用了 jobs.yaml 里没有的作业名 nightly_recon（receipt_wrap --job）· 源：impl-7 #451 汇报 · 机主无需裁
-- 包装器用了 jobs.yaml 里没有的作业名 nightly_recon（receipt_wrap --job）· 源：impl-7 #451 汇报 · 机主无需裁
-- job_logs.exit_code 列在信息级退出时写 0；真实码只在 statistics.exit_code
-"""
-LEGACY_PARKED = [line[2:] for line in LEGACY.split("## Parked\n")[1].splitlines() if line.startswith("- ")]
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/engineering/i-have-ocd/scripts/ocd.py"
 
 
 @pytest.fixture(scope="module")
@@ -65,538 +22,439 @@ def ocd():
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     monkeypatch.setenv("I_HAVE_OCD_HOME", str(tmp_path))
-    monkeypatch.setenv("I_HAVE_OCD_PROJECT", "t")
-    monkeypatch.setenv("I_HAVE_OCD_BY", "s1")
+    monkeypatch.setenv("I_HAVE_OCD_PROJECT", "sample")
+    monkeypatch.setenv("I_HAVE_OCD_ACTOR_ID", "actor-a")
+    monkeypatch.delenv("I_HAVE_OCD_BACKEND", raising=False)
+    monkeypatch.delenv("I_HAVE_OCD_CHILD", raising=False)
     return tmp_path
 
 
+def finding(n=1, actor="actor-a", owner="maintenance"):
+    return {"key": {"object": "component:reader", "consequence": "valid-input-rejected", "occurrence": f"incident-{n}"},
+            "summary": "Reader rejects valid input", "trigger": "Contract probe failed", "consequence": "Records cannot be imported",
+            "sources": [{"ref": f"run-{n}", "evidence": "Probe input and rejected output"}], "owner": owner,
+            "responsible_actor": actor, "record_search": {"result": "none", "checked": ["task", "record-index"], "evidence_ref": "search-1"}}
+
+
+def choice(n=1, **extra):
+    return {"question": f"Support optional format {n}?", "owner_only_reason": "Changes the authorized scope",
+            "authority_ref": "task-1", "options": [{"id": "keep", "label": "Keep scope", "cost": "Format remains unsupported"},
+            {"id": "extend", "label": "Extend scope", "cost": "Adds implementation and validation"}],
+            "recommended": "keep", "inaction_consequence": "Format cannot enter this delivery", **extra}
+
+
 @pytest.fixture
-def cli(ocd, home, capsys):
-    """Run one command in this process: (exit code, parsed JSON or the printed text)."""
-    def run(*argv):
-        code = ocd.main([str(a) for a in argv])
-        out = capsys.readouterr().out
-        return code, json.loads(out) if out.startswith("{") else out.strip()
+def api(ocd, home, capsys):
+    sequence = 0
+
+    def run(op, data=None, expected=None, actor="actor-a", request_id=None, lease=None, leases=None, role="parent", workspace=None):
+        nonlocal sequence
+        sequence += 1
+        envelope = {"contract": ocd.CONTRACT, "op": op, "actor": {"id": actor, "parent_id": None},
+                    "input": data or {}, "expected": expected or {}, "request_id": request_id or f"request-{sequence}"}
+        if workspace:
+            envelope["workspace_id"] = workspace
+        if lease:
+            envelope["lease"] = lease
+        if leases:
+            envelope["leases"] = leases
+        path = home / "request.json"
+        path.write_text(json.dumps(envelope))
+        code = ocd.main(["api", "--request", str(path), "--role", role])
+        return code, json.loads(capsys.readouterr().out)
     return run
 
 
-def park(cli, summary, request_id, *extra):
-    code, out = cli("park", summary, "--request-id", request_id, *extra)
-    assert code == 0, out
-    return out["item"]
+def ok(api, *args, **kwargs):
+    code, result = api(*args, **kwargs)
+    assert code == 0, result
+    return result["result"]
 
 
-def test_ids_are_stable_and_never_reused(cli):
-    first, second, third = (park(cli, f"item {n}", f"r{n}") for n in (1, 2, 3))
-    assert [first["ref"], second["ref"], third["ref"]] == ["P1", "P2", "P3"]
-    assert cli("done", "P3", "--kind", "resolved", "--ref", "fixed in abc123", "--expected-version", 1,
-               "--request-id", "d3")[0] == 0
-    assert park(cli, "item 4", "r4")["ref"] == "P4"
-    code, listed = cli("list")
-    assert [(i["ref"], i["summary"]) for i in listed["items"]] == [("P1", "item 1"), ("P2", "item 2"), ("P4", "item 4")]
+def create(api, n=1, **kwargs):
+    return ok(api, "intake", finding(n, **kwargs))["item"]
 
 
-def test_two_concerns_on_one_ticket_stay_two_items(cli):
-    a = park(cli, "#445 PRE_SUBMIT exit expires without an alert", "a", "--tracking", "#445")
-    b = park(cli, "#445 a hard-constraint revoke pages nobody", "b", "--tracking", "#445", "--needs-owner")
-    assert a["id"] != b["id"]
-    code, listed = cli("list")
-    assert listed["counts"]["pending"] == 2 and listed["counts"]["needs_owner"] == 1
-    assert cli("done", "P1", "--kind", "ticket", "--ref", "#445 comment 1", "--expected-version", 1,
-               "--request-id", "d1")[0] == 0
-    assert [i["ref"] for i in cli("list")[1]["items"]] == ["P2"]
+def propose(api, item, n=1, **extra):
+    return ok(api, "decision.propose", {"item_id": item["id"], **choice(n, **extra)}, {"item": item["version"]})
 
 
-def test_add_source_keeps_the_id(cli):
-    park(cli, "flaky test_x", "p", "--source", "run 1")
-    code, out = cli("add-source", "P1", "--source", "run 2", "--tracking", "#7", "--expected-version", 1,
-                    "--request-id", "s1")
-    assert code == 0
-    assert (out["item"]["ref"], out["item"]["version"]) == ("P1", 2)
-    assert out["item"]["source_refs"] == ["run 1", "run 2"] and out["item"]["tracking_refs"] == ["#7"]
-    code, out = cli("add-source", "P1", "--source", "run 2", "--expected-version", 2, "--request-id", "s2")
-    assert out["unchanged"] is True and out["item"]["version"] == 2
-    assert cli("count") == (0, "1")
+def take(api, item, actor="actor-a"):
+    return ok(api, "lease.acquire", {"item_id": item["id"]}, {"item": item["version"]}, actor=actor)["lease"]
 
 
-def test_a_retried_request_returns_the_original_result_and_a_reused_id_conflicts(cli):
-    first = park(cli, "one", "r1")
-    code, again = cli("park", "one", "--request-id", "r1")
-    assert code == 0 and again["replayed"] is True and again["item"]["id"] == first["id"]
-    assert cli("count") == (0, "1")
-    done = ("done", "P1", "--kind", "pr", "--ref", "#41", "--expected-version", 1, "--request-id", "d1")
-    assert cli(*done)[0] == 0
-    code, retried = cli(*done)  # the version has moved on; the retry is still the same request
-    assert code == 0 and retried["replayed"] is True and retried["item"]["status"] == "done"
-    code, conflict = cli("done", "P1", "--kind", "pr", "--ref", "#42", "--expected-version", 1, "--request-id", "d1")
-    assert code == 3 and conflict["error"] == "conflict"
-    assert conflict["original"]["item"]["receipt"] == {"kind": "pr", "ref": "#41"}
-    assert conflict["current"]["status"] == "done"
+def shown(api, item):
+    return ok(api, "show", {"item_id": item["id"]})["item"]
 
 
-def test_a_stale_version_conflicts_and_returns_the_current_state(cli):
-    park(cli, "one", "r1")
-    assert cli("add-source", "P1", "--source", "a", "--expected-version", 1, "--request-id", "a")[0] == 0
-    code, out = cli("decide", "P1", "--ref", "questionnaire Q3: do it", "--expected-version", 1, "--request-id", "q")
-    assert code == 3
-    assert out["current"]["version"] == 2 and out["current"]["source_refs"] == ["a"]
-    assert out["current"]["decision_ref"] is None
+def test_intake_requires_consequence_and_no_owning_record(api):
+    invalid = finding()
+    invalid["consequence"] = " "
+    code, error = api("intake", invalid)
+    assert code == 2 and error["error"]["reason"] == "NO_CONCRETE_CONSEQUENCE"
+    invalid = finding()
+    invalid["record_search"]["result"] = "found"
+    invalid["owning_record"] = {"ref": "task:existing", "owner": "maintenance", "authority_ref": "task-authority"}
+    code, error = api("intake", invalid)
+    assert code == 2 and error["error"]["reason"] == "USE_EXISTING_RECORD"
+    assert ok(api, "list")["items"] == []
+    linked = ok(api, "link", invalid)
+    assert linked["outcome"] == "linked" and linked["item"]["attention_state"] == "routed"
+    assert linked["item"]["decisions"] == []
+    invalid["owning_record"]["ref"] = "task:another"
+    assert api("link", invalid)[0] == 3
 
 
-def test_a_lease_expires_can_be_taken_again_and_the_stale_holder_is_refused(ocd, cli, monkeypatch):
-    park(cli, "one", "r1")
-    code, taken = cli("take", "P1", "--expected-version", 1, "--request-id", "t1", "--ttl-minutes", 30)
-    assert code == 0 and taken["item"]["claim"]["holder"] == "s1" and "claim_token" not in taken["item"]
-    token = taken["token"]
-    code, out = cli("take", "P1", "--expected-version", 2, "--request-id", "t2", "--by", "s2")
-    assert code == 3 and "held by s1" in out["message"]
-    code, out = cli("done", "P1", "--kind", "resolved", "--ref", "x", "--expected-version", 2, "--request-id", "d0",
-                    "--by", "s2")
-    assert code == 3 and "held by s1" in out["message"]
-    listed = cli("list")[1]
-    assert listed["counts"]["taken"] == 1 and listed["items"][0]["claim"]["expired"] is False
+def test_key_is_normalized_and_deduplication_never_changes_responsibility(api):
+    data = finding()
+    data["key"]["object"] = "  cafe\u0301  "
+    first = ok(api, "intake", data)["item"]
+    data["key"]["object"] = "café"
+    data["responsible_actor"] = "actor-b"
+    data["owner"] = "another lane"
+    again = ok(api, "intake", data, actor="actor-b")
+    assert again["outcome"] == "existing" and again["item"]["id"] == first["id"]
+    assert again["item"]["responsible_actor"] == "actor-a"
+    different = finding(2)
+    different["key"]["consequence"] = "delayed-output"
+    assert ok(api, "intake", different)["item"]["id"] != first["id"]
 
-    later = ocd.utcnow() + timedelta(hours=1)
+
+def test_sqlite_rejects_a_duplicate_concern_key(api, home, ocd):
+    item = create(api)
+    with sqlite3.connect(home / "sample.db") as db:
+        workspace = db.execute("SELECT value FROM meta WHERE key='workspace_id'").fetchone()[0]
+        duplicate = {**item, "id": ocd.new_id()}
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("INSERT INTO concerns VALUES (?, ?, ?, ?)",
+                       (duplicate["id"], workspace, item["concern_key"], ocd.canonical(duplicate)))
+    assert len(ok(api, "list")["items"]) == 1
+
+
+def test_request_id_cas_and_actor_are_checked_atomically(api):
+    first = ok(api, "intake", finding(), request_id="same")
+    code, replay = api("intake", finding(), request_id="same")
+    assert code == 0 and replay["replayed"] and replay["result"] == first
+    assert api("intake", finding(2), request_id="same")[0] == 3
+    assert api("intake", finding(actor="actor-b"), request_id="same", actor="actor-b")[0] == 3
+    item = first["item"]
+    source = {"item_id": item["id"], "sources": [{"ref": "run-new", "evidence": "New consumer fails"}]}
+    changed = ok(api, "add_source", source, {"item": 1})["item"]
+    assert changed["id"] == item["id"] and changed["version"] == 2
+    code, error = api("add_source", source, {"item": 1})
+    assert code == 3 and error["current"]["version"] == 2
+    assert len(shown(api, item)["sources"]) == 2
+    assert api("add_source", source, {"item": 2, "decision": 0})[0] == 2
+    assert api("show", {"item_id": item["id"]}, workspace="wrong-workspace")[0] == 4
+
+
+def test_route_and_ack_never_clear_owner_decisions(api):
+    result = propose(api, create(api))
+    item, decision = result["item"], result["decision"]
+    lease = take(api, item)
+    offered = ok(api, "route.offer", {"item_id": item["id"], "target": {"actor_id": "actor-b", "owner": "reader team"},
+                "proposed_record": "task:reader", "authorization_ref": "existing-task", "instruction": "Take responsibility on the existing record"},
+                {"item": item["version"]}, lease=lease)
+    assert offered["delivery"] == "manual" and offered["item"]["responsible_actor"] == "actor-a"
+    handoff = offered["handoff"]
+    ack = ok(api, "route.receipt", {"handoff_id": handoff["id"], "receipt": {"kind": "ack", "ref": "message-1"}},
+             {"handoff": 1}, actor="actor-b")
+    assert ack["item"]["needs_owner"] and ack["item"]["responsible_actor"] == "actor-a"
+    accept = {"handoff_id": handoff["id"], "offer_version": 1, "owning_record": "task:reader",
+              "receipt": {"kind": "accepted", "ref": "acceptance-1", "responsibility": "Own follow-up including the choice"}}
+    assert api("route.accept", accept, {"handoff": 2}, actor="actor-c")[0] == 4
+    bad = copy.deepcopy(accept)
+    bad["receipt"]["kind"] = "ack"
+    assert api("route.accept", bad, {"handoff": 2}, actor="actor-b")[0] == 2
+    accepted = ok(api, "route.accept", accept, {"handoff": 2}, actor="actor-b")["item"]
+    assert accepted["id"] == item["id"] and accepted["responsible_actor"] == "actor-b"
+    assert accepted["routing"]["state"] == "accepted" and accepted["attention_state"] == "owner_pending"
+    assert accepted["decisions"][0]["id"] == decision["id"]
+    new_lease = take(api, accepted, actor="actor-b")
+    assert new_lease["fence"] > lease["fence"]
+    ok(api, "decision.answer", {"decision_id": decision["id"], "option_id": "keep", "answer_ref": "owner-answer-1", "ruling_id": "ruling-1"}, {"decision": 1})
+    accepted = shown(api, item)
+    assert accepted["attention_state"] == "owner_decided" and accepted["lifecycle"] == "active"
+
+
+def test_close_cannot_drop_unanswered_or_later_decisions(api):
+    result = propose(api, create(api))
+    item, decision = result["item"], result["decision"]
+    lease = take(api, item)
+    closure = {"item_id": item["id"], "kind": "owner_dropped", "ref": "owner-drop", "evidence": "Owner abandoned the work"}
+    assert api("close", closure, {"item": item["version"]}, lease=lease)[0] == 3
+    condition = {"kind": "dependency_completed", "ref": "dependency-1", "predicate": "Supported reader released"}
+    ok(api, "decision.later", {"decision_id": decision["id"], "answer_ref": "owner-later", "ruling_id": "later-1", "reopen_condition": condition}, {"decision": 1})
+    assert api("close", closure, {"item": item["version"]}, lease=lease)[0] == 3
+    bad = {"decision_id": decision["id"], "evidence_ref": "message-ack", "reason": "Already received"}
+    assert api("decision.withdraw", bad, {"decision": 2})[0] == 2
+    ok(api, "decision.withdraw", {**bad, "choice_no_longer_exists": True, "basis": "choice_removed", "evidence_ref": "scope-removed"}, {"decision": 2})
+    closed = ok(api, "close", closure, {"item": item["version"]}, lease=lease)["item"]
+    assert closed["lifecycle"] == "closed" and closed["decisions"][0]["state"] == "withdrawn"
+
+
+def test_merge_preserves_every_unanswered_decision_and_sources(api):
+    a = propose(api, create(api), 1)["item"]
+    b = propose(api, create(api, 2), 2)["item"]
+    leases = {"from_item": take(api, a), "to_item": take(api, b)}
+    payload = {"from_item": a["id"], "to_item": b["id"], "evidence_ref": "comparison", "reason": "Evidence confirms the same occurrence"}
+    assert api("merge", payload, {"from_item": a["version"], "to_item": 99}, leases=leases)[0] == 3
+    assert shown(api, a)["id"] == a["id"]
+    merged = ok(api, "merge", payload, {"from_item": a["version"], "to_item": b["version"]}, leases=leases)["item"]
+    assert len(merged["decisions"]) == 2 and all(d["state"] == "owner_pending" for d in merged["decisions"])
+    assert len(merged["sources"]) == 2
+    assert shown(api, a)["id"] == b["id"]
+    assert ok(api, "find", {"key": finding()["key"]})["item"]["id"] == b["id"]
+    assert ok(api, "intake", finding())["item"]["id"] == b["id"]
+
+
+def test_stale_fence_cannot_write_even_with_current_item_version(api, ocd, monkeypatch):
+    item = create(api)
+    original = take(api, item)
+    later = ocd.utcnow() + timedelta(hours=2)
     monkeypatch.setattr(ocd, "utcnow", lambda: later)
-    assert cli("list")[1]["items"][0]["claim"]["expired"] is True
-    code, retaken = cli("take", "P1", "--expected-version", 2, "--request-id", "t3", "--by", "s2")
-    assert code == 0 and retaken["item"]["claim"]["holder"] == "s2" and retaken["token"] != token
-    code, out = cli("done", "P1", "--kind", "resolved", "--ref", "x", "--expected-version", 3, "--request-id", "d1",
-                    "--token", token)
-    assert code == 3 and "stale holder" in out["message"]
-    code, out = cli("done", "P1", "--kind", "resolved", "--ref", "x", "--expected-version", 3, "--request-id", "d2",
-                    "--token", retaken["token"], "--by", "s2")
-    assert code == 0 and out["item"]["closed_by"] == "s2"
+    current = take(api, item)
+    assert current["fence"] == original["fence"] + 1
+    closure = {"item_id": item["id"], "kind": "resolved", "ref": "fix", "evidence": "Probe passes"}
+    assert api("close", closure, {"item": 1}, lease={**current, "fence": original["fence"]})[0] == 3
+    assert api("close", closure, {"item": 1}, lease=original)[0] == 3
+    assert api("lease.renew", {"item_id": item["id"]}, {"item": 1}, lease=original)[0] == 3
+    assert api("close", closure, {"item": 1}, lease=current, actor="actor-b")[0] in (3, 4)
+    assert ok(api, "close", closure, {"item": 1}, lease=current)["item"]["lifecycle"] == "closed"
+    read = ok(api, "show", {"item_id": item["id"], "history": True})
+    assert "token" not in json.dumps(read)
 
 
-@pytest.mark.parametrize("receipt", [
-    (), ("--kind", "ticket"), ("--kind", "ticket", "--ref", "  "), ("--kind", "ack", "--ref", "msg 1"),
-    ("--kind", "legacy-hand-removed", "--ref", "t.md"),
-])
-def test_done_without_a_valid_receipt_is_refused(cli, receipt):
-    park(cli, "one", "r1")
-    code, out = cli("done", "P1", *receipt, "--expected-version", 1, "--request-id", "d")
-    assert code == 2 and out["error"] == "invalid"
-    assert cli("count") == (0, "1")
+def test_one_review_counts_independent_decisions_across_all_lanes(api, ocd, monkeypatch):
+    for n in range(6):
+        item = create(api, n, owner=f"lane-{n % 3}")
+        propose(api, item, n, group="same-group")
+    start = {"owner_scope": "owner", "trigger": {"kind": "owner_request", "ref": "request-review-1"}, "previous_review_id": None}
+    first = ok(api, "review.start", start)
+    review = first["review"]
+    assert len(review["snapshot"]) == len(review["decisions"]) == 4 and review["has_more"]
+    resumed = ok(api, "review.start", start, actor="actor-b")
+    assert resumed["resumed"] and resumed["review"]["id"] == review["id"] and "lease" not in resumed
+    present = {"review_id": review["id"], "presentation_ref": "questionnaire-1"}
+    assert api("review.present", present, {"review": 1}, lease=first["lease"], actor="actor-b")[0] == 3
+    presented = ok(api, "review.present", present, {"review": 1}, lease=first["lease"])["review"]
+    assert len(presented["presented_ids"]) == 4
+    clock = ocd.utcnow() + timedelta(hours=2)
+    monkeypatch.setattr(ocd, "utcnow", lambda: clock)
+    retaken = ok(api, "review.start", start, actor="actor-b")
+    assert retaken["review"]["id"] == review["id"] and len(retaken["review"]["snapshot"]) == 4
+    assert retaken["lease"]["fence"] > first["lease"]["fence"]
+    assert api("review.finish", {"review_id": review["id"], "finish_ref": "finished"}, {"review": 2}, lease=first["lease"])[0] == 3
+    ok(api, "review.finish", {"review_id": review["id"], "finish_ref": "finished"}, {"review": 2}, actor="actor-b", lease=retaken["lease"])
+    assert api("review.start", start)[0] == 3
+    assert len(ok(api, "list")["items"]) == 6
+    next_review = ok(api, "review.start", {**start, "trigger": {"kind": "owner_request", "ref": "explicit-continue"}, "previous_review_id": review["id"]})
+    assert next_review["review"]["id"] != review["id"]
 
 
-def test_drop_needs_the_owners_decision(cli):
-    park(cli, "one", "r1")
-    assert cli("drop", "P1", "--expected-version", 1, "--request-id", "x")[0] == 2
-    code, out = cli("drop", "P1", "--decision", "questionnaire 09-29 Q2: drop", "--expected-version", 1,
-                    "--request-id", "y")
-    assert code == 0 and out["item"]["status"] == "dropped"
-    assert out["item"]["decision_ref"] == out["item"]["receipt"]["ref"] == "questionnaire 09-29 Q2: drop"
+def test_review_does_not_refill_a_changed_snapshot(api):
+    item = create(api)
+    decisions = []
+    for n in range(5):
+        proposed = propose(api, item, n)
+        item = proposed["item"]
+        decisions.append(proposed["decision"])
+    started = ok(api, "review.start", {"owner_scope": "owner", "trigger": {"kind": "main_line_blocker", "ref": "blocker"}})
+    decision = decisions[0]
+    ok(api, "decision.answer", {"decision_id": decision["id"], "option_id": "keep", "ruling_id": "ruling", "answer_ref": "answer"}, {"decision": 1})
+    current = ok(api, "review.show", {"review_id": started["review"]["id"]})["review"]
+    assert len(current["decisions"]) == 3 and len(current["snapshot"]) == 4
+    assert decisions[-1]["id"] not in {d["id"] for d in current["decisions"]}
+    assert "token" not in json.dumps(current)
 
 
-def test_a_ruling_keeps_the_item_pending(cli):
-    park(cli, "one", "r1", "--needs-owner")
-    code, out = cli("decide", "P1", "--ref", "questionnaire 09-29 Q1: do it", "--expected-version", 1,
-                    "--request-id", "q")
-    assert code == 0
-    assert (out["item"]["status"], out["item"]["needs_owner"]) == ("open", False)
-    assert out["item"]["decision_ref"] == "questionnaire 09-29 Q1: do it" and out["item"]["receipt"] is None
-    listed = cli("list")[1]
-    assert listed["counts"]["pending"] == 1 and listed["counts"]["needs_owner"] == 0
-    assert cli("count") == (0, "1")
+def test_later_reopens_only_for_matching_event_and_keeps_rulings(api, ocd, monkeypatch):
+    result = propose(api, create(api))
+    decision = result["decision"]
+    condition = {"kind": "consequence_changed", "ref": "capacity", "predicate": "New evidence changes the limit"}
+    assert api("decision.later", {"decision_id": decision["id"], "answer_ref": "silence", "ruling_id": "ruling"}, {"decision": 1})[0] == 2
+    ok(api, "decision.later", {"decision_id": decision["id"], "answer_ref": "owner-response", "ruling_id": "later-ruling", "reopen_condition": condition}, {"decision": 1})
+    clock = ocd.utcnow() + timedelta(days=365)
+    monkeypatch.setattr(ocd, "utcnow", lambda: clock)
+    assert shown(api, result["item"])["attention_state"] == "later"
+    assert ok(api, "list", {"state": "owner_pending"})["items"] == []
+    reopen = {"decision_id": decision["id"], "event_ref": "new-probe", "evidence_ref": "probe-output", "incremental_question": "Increase the measured limit?",
+              "event_kind": "consequence_changed", "condition_ref": "capacity", "predicate": condition["predicate"]}
+    assert api("decision.reopen", {**reopen, "event_kind": "time_elapsed"}, {"decision": 2})[0] == 2
+    ok(api, "decision.reopen", reopen, {"decision": 2})
+    ok(api, "decision.answer", {"decision_id": decision["id"], "option_id": "extend", "ruling_id": "final-ruling", "answer_ref": "second-answer"}, {"decision": 3})
+    snapshot = ok(api, "export", {"include_history": True})["snapshot"]
+    assert len(snapshot["tables"]["rulings"]) == 2
 
 
-def test_a_closed_item_is_never_reopened(cli):
-    park(cli, "one", "r1")
-    assert cli("done", "P1", "--kind", "scheduled", "--ref", "job 7 at 09:14", "--expected-version", 1,
-               "--request-id", "d")[0] == 0
-    for argv in (("take", "P1", "--expected-version", 2, "--request-id", "a"),
-                 ("decide", "P1", "--ref", "x", "--expected-version", 2, "--request-id", "b"),
-                 ("add-source", "P1", "--source", "x", "--expected-version", 2, "--request-id", "c"),
-                 ("drop", "P1", "--decision", "x", "--expected-version", 2, "--request-id", "e")):
-        code, out = cli(*argv)
-        assert code == 3 and "never reopened" in out["message"] and out["current"]["status"] == "done"
-    recurrence = park(cli, "one, again", "r2", "--source", "recurrence of P1")
-    assert recurrence["ref"] == "P2"
+def test_shared_decision_links_reuse_the_original_ruling(api):
+    result = propose(api, create(api))
+    decision = result["decision"]
+    ok(api, "decision.answer", {"decision_id": decision["id"], "option_id": "keep", "answer_ref": "owner-answer", "ruling_id": "one-ruling"}, {"decision": 1})
+    second = create(api, 2)
+    linked = ok(api, "decision.link", {"item_id": second["id"], "decision_id": decision["id"], "evidence_ref": "same-choice"}, {"item": 1, "decision": 2})
+    assert linked["item"]["attention_state"] == "owner_decided"
+    assert linked["item"]["decisions"][0]["current_ruling_id"] == "one-ruling"
+    assert len(ok(api, "export", {"include_history": True})["snapshot"]["tables"]["rulings"]) == 1
 
 
-def test_count_on_a_missing_or_damaged_store_is_a_question_mark(cli, home):
-    assert cli("count") == (1, "?")
-    code, out = cli("list")
-    assert code == 1 and out["error"] == "unavailable" and "no store" in out["message"]
-    assert not (home / "t.db").exists()  # a read never creates the store
-    (home / "t.db").write_bytes(b"this is not a database, just bytes" * 200)
-    assert cli("count") == (1, "?")
-    assert cli("list")[0] == 1
-    (home / "t.db").unlink()
-    other = sqlite3.connect(home / "t.db")
-    other.execute("CREATE TABLE something_else (x)")
-    other.commit()
-    other.close()
-    assert cli("count") == (1, "?")
+def test_recurrence_requires_new_occurrence_after_a_real_fix(api):
+    item = create(api)
+    lease = take(api, item)
+    ok(api, "close", {"item_id": item["id"], "kind": "resolved", "ref": "fix-1", "evidence": "Contract probe passes"}, {"item": 1}, lease=lease)
+    assert ok(api, "intake", finding())["item"]["id"] == item["id"]
+    data = {**finding(2), "recurrence_of": item["id"]}
+    recurrence = ok(api, "intake", data)["item"]
+    assert recurrence["id"] != item["id"] and recurrence["recurrence_of"] == item["id"]
+    data = {**finding(3), "recurrence_of": recurrence["id"]}
+    assert api("intake", data)[0] == 2
+    assert ok(api, "add_source", {"item_id": item["id"], "sources": [{"ref": "later-read", "evidence": "Additional consumer evidence"}]}, {"item": 2})["item"]["lifecycle"] == "closed"
 
 
-def test_a_locked_store_fails_explicitly_and_reads_go_on(ocd, cli, home, monkeypatch):
-    park(cli, "one", "r1")
-    monkeypatch.setattr(ocd, "BUSY_SECONDS", 0.2)
-    writer = sqlite3.connect(home / "t.db", isolation_level=None)
-    writer.execute("BEGIN IMMEDIATE")
+def test_main_lines_are_actor_scoped_and_counts_are_opt_in(api):
+    a = ok(api, "main.set", {"title": "Reader contract", "done_when": "Probe passes"}, {"main": 0})
+    b = ok(api, "main.set", {"title": "Writer contract"}, {"main": 0}, actor="actor-b")
+    assert a["main"]["id"] != b["main"]["id"]
+    assert ok(api, "main.get")["main"]["title"] == "Reader contract"
+    assert ok(api, "main.get", actor="actor-b")["main"]["title"] == "Writer contract"
+    assert api("main.set", {"next_step": "stale"}, {"main": 0})[0] == 3
+    create(api)
+    assert "counts" not in ok(api, "list")
+    assert ok(api, "list", {"include_counts": True})["counts"] == {"work": 1, "owner_pending": 0, "later": 0}
+
+
+def test_child_writes_and_shared_failure_never_fall_back(api, home, monkeypatch):
+    assert api("intake", finding(), role="child")[0] == 4
+    assert not (home / "sample.db").exists()
+    monkeypatch.setenv("I_HAVE_OCD_CHILD", "1")
+    assert api("main.set", {"title": "child"}, {"main": 0})[0] == 4
+    monkeypatch.delenv("I_HAVE_OCD_CHILD")
+    monkeypatch.setenv("I_HAVE_OCD_BACKEND", "shared")
+    code, result = api("intake", finding())
+    assert code == 1 and result["error"]["code"] == "UNAVAILABLE"
+    assert not (home / "sample.db").exists()
+    monkeypatch.delenv("I_HAVE_OCD_BACKEND")
+    item = create(api)
+    monkeypatch.setenv("I_HAVE_OCD_BACKEND", "shared")
+    assert api("list")[0] == 1
+    monkeypatch.delenv("I_HAVE_OCD_BACKEND")
+    assert shown(api, item)["version"] == 1
+
+
+def test_markdown_deletion_is_divergence_never_closure(api, home):
+    item = create(api)
+    ok(api, "render")
+    view = home / "sample.md"
+    edited = "\n".join(line for line in view.read_text().splitlines() if item["id"] not in line) + "\n"
+    view.write_text(edited)
+    code, result = api("list")
+    assert code == 3 and result["error"]["reason"] == "VIEW_DIVERGED" and result["committed"] is False
+    assert api("render")[0] == 3
+    with sqlite3.connect(home / "sample.db") as db:
+        stored = json.loads(db.execute("SELECT data FROM concerns").fetchone()[0])
+        assert stored["lifecycle"] == "active" and stored["version"] == 1
+    assert view.read_text() == edited
+
+
+def test_render_updates_explicitly_and_reads_leave_a_stale_projection_alone(api, home):
+    item = create(api)
+    ok(api, "render")
+    before = (home / "sample.md").read_bytes()
+    create(api, 2)
+    assert len(ok(api, "list")["items"]) == 2
+    assert (home / "sample.md").read_bytes() == before
+    ok(api, "render")
+    assert (home / "sample.md").read_bytes() != before
+    assert item["id"] in (home / "sample.md").read_text()
+
+
+def test_unavailable_missing_damaged_and_locked_are_not_empty(api, home, ocd, monkeypatch):
+    assert api("list")[0] == 1
+    assert not (home / "sample.db").exists()
+    (home / "sample.db").write_bytes(b"not a database" * 100)
+    assert api("list")[0] == 1
+    (home / "sample.db").unlink()
+    item = create(api)
+    monkeypatch.setattr(ocd, "BUSY_SECONDS", 0.01)
+    with sqlite3.connect(home / "sample.db") as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        assert api("intake", finding(2))[0] == 1
+        assert shown(api, item)["version"] == 1
+        writer.rollback()
+
+
+def test_urgent_receipts_keep_first_notification_and_do_not_wait_for_review(api):
+    item = create(api)
+    item = ok(api, "urgent", {"item_id": item["id"], "action": "raise", "facts": "Probe detected lost writes", "pending_verification": "Impact not measured",
+             "consequence": "Records may be missing", "responder": "actor-a"}, {"item": 1})["item"]
+    assert item["urgency"]["first_notification"] is None
+    item = ok(api, "urgent", {"item_id": item["id"], "action": "notified", "notification_ref": "outward-reply-1"}, {"item": 2})["item"]
+    item = ok(api, "urgent", {"item_id": item["id"], "action": "notified", "notification_ref": "outward-reply-2"}, {"item": 3})["item"]
+    assert item["urgency"]["first_notification"]["ref"] == "outward-reply-1"
+    assert item["decisions"] == []
+
+
+def test_export_import_preserves_decisions_history_and_fences_leases(api, home, ocd, capsys):
+    result = propose(api, create(api))
+    lease = take(api, result["item"])
+    export = ok(api, "export", {"include_history": True})
+    assert lease["token"] not in json.dumps(export) and "token_hash" not in json.dumps(export)
+    source_events = len(export["snapshot"]["tables"]["events"])
+    target = ocd.Store("restored", "actor-a", home=home)
+    request = {"contract": ocd.CONTRACT, "op": "import.apply", "request_id": "restore-1", "actor": {"id": "actor-a"},
+               "expected": {"revision": 0}, "input": export}
     try:
-        code, out = cli("park", "two", "--request-id", "r2")
-        assert code == 1 and "locked" in out["message"]
-        assert cli("count") == (0, "1")
+        restored = target.execute(request)
+        assert restored["result"]["imported"] and restored["store_id"] == export["snapshot"]["store_id"]
+        target.close()
+        assert target.execute(request)["replayed"]
+        target.close()
+        target.open()
+        assert len(target.history()) == source_events + 1
+        assert target.public(target.resolve(result["item"]["id"]))["needs_owner"]
+        assert target.get("leases", lease["id"])["fence"] > lease["fence"]
     finally:
-        writer.execute("ROLLBACK")
-        writer.close()
+        target.close()
 
 
-def test_the_main_line_changes_only_from_the_version_read(cli):
-    assert cli("main", "get")[0] == 1  # no store yet: `main set` creates it
-    code, out = cli("main", "set", "--title", "MS-6a", "--done-when", "gate G6a", "--next-step", "run the probe",
-                    "--set-by", "owner 09-27", "--expected-version", 0, "--request-id", "m1")
-    assert code == 0 and out["main"]["version"] == 1
-    code, out = cli("main", "set", "--next-step", "stale", "--expected-version", 0, "--request-id", "m2")
-    assert code == 3 and out["current"]["next_step"] == "run the probe"
-    code, out = cli("main", "set", "--paused-for", "owner's detour", "--expected-version", 1, "--request-id", "m3")
-    assert code == 0 and (out["main"]["title"], out["main"]["paused_for"]) == ("MS-6a", "owner's detour")
-    got = cli("main", "get")[1]
-    assert got["version"] == 2 and got["main"]["next_step"] == "run the probe"
+def test_snapshot_missing_decision_link_is_rejected_without_partial_import(api, home, ocd):
+    propose(api, create(api))
+    export = ok(api, "export", {"include_history": True})
+    export["snapshot"]["tables"]["decision_links"] = []
+    export["digest"] = ocd.digest(export["snapshot"])
+    target = ocd.Store("restored", "actor-a", home=home)
+    try:
+        with pytest.raises(ocd.Invalid, match="UNLINKED_DECISION"):
+            target.execute({"contract": ocd.CONTRACT, "op": "import.apply", "request_id": "restore", "actor": {"id": "actor-a"},
+                            "expected": {"revision": 0}, "input": export})
+        assert target.rows("concerns") == []
+    finally:
+        target.close()
 
 
-def test_import_md_keeps_every_line_verbatim_and_a_rerun_adds_nothing(cli, home):
-    view = home / "t.md"
-    view.write_text(LEGACY, encoding="utf-8")
-    code, out = cli("park", "new", "--request-id", "p")
-    assert code == 1 and "import-md" in out["message"]
-    assert cli("count") == (1, "?")
-
-    code, out = cli("import-md", view)
-    assert code == 0, out
-    assert len(out["imported"]) == len(LEGACY_PARKED) == 7 and out["main"] == "set"
-    assert Path(out["backup"]).read_text(encoding="utf-8") == LEGACY
-    items = cli("list")[1]["items"]
-    assert [i["summary"] for i in items] == LEGACY_PARKED  # the duplicate line and both #445 lines stay apart
-    assert all(i["source_refs"] == ["legacy t.md"] for i in items)
-    main = cli("main", "get")[1]["main"]
-    assert main["title"].startswith("Checkout v2") and main["next_step"] == f"(2026-09-28 22:50 ET) {LONG_NEXT_STEP}"
-    assert main["set_by"] == '2026-09-27 by owner ("我其实想现在先管这个结账的事情")'
-    assert [n.split(":")[0] for n in main["notes"]] == [
-        "open main-line decision (owner, 09-28)", "ruled 2026-09-27 (questionnaire)", "3a input", "session"]
-
-    copy = home / "vol-copy.md"
-    copy.write_text(LEGACY, encoding="utf-8")
-    code, again = cli("import-md", copy)
-    assert code == 0 and again["imported"] == [] and len(again["already"]) == 7 and again["main"] == "unchanged"
-    assert cli("count") == (0, "7")
-    code, out = cli("import-md", view)
-    assert code == 2 and "generated" in out["message"]
+def test_import_plan_is_read_only_for_a_missing_target(api, home, ocd):
+    create(api)
+    export = ok(api, "export", {"include_history": True})
+    target = ocd.Store("missing", "actor-a", home=home)
+    result = target.execute({"contract": ocd.CONTRACT, "op": "import.plan", "input": export})
+    assert result["result"]["ready"] and result["receipt"]["committed"] is False
+    assert not target.path.exists()
 
 
-def test_a_hand_edit_of_the_view_is_reconciled_by_the_next_command(cli, home):
-    for n in (1, 2, 3):
-        park(cli, f"item {n}", f"r{n}", "--source", f"s{n}")
-    code, rendered = cli("render")
-    view = home / "t.md"
-    assert code == 0 and rendered["hash"] == hashlib.sha256(view.read_bytes()).hexdigest()
-    text = view.read_text(encoding="utf-8")
-    assert text.startswith("<!-- GENERATED by i-have-ocd") and "ocd.py" in text.splitlines()[0]
-
-    lines = text.splitlines()
-    lines = [line + "; also seen in run 9" if line.startswith("- P1 ·") else line
-             for line in lines if not line.startswith("- P2 ·")]
-    lines.append("- a finding an old-skill session wrote by hand")
-    lines.insert(lines.index("## Main line") + 1, "- title: set by hand")
-    view.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    code, out = cli("park", "item 4", "--request-id", "r4")
-    assert code == 0
-    assert out["reconciled"] == {"edited": ["P1"], "parked": ["P4"], "closed": ["P2"], "main": True}
-    assert out["item"]["ref"] == "P5"
-    p2 = cli("show", "P2")[1]["item"]
-    assert p2["status"] == "done" and p2["receipt"] == {"kind": "legacy-hand-removed", "ref": "t.md"}
-    assert cli("show", "P1")[1]["item"]["source_refs"] == ["s1", "hand-edited t.md: also seen in run 9"]
-    assert cli("show", "P4")[1]["item"]["source_refs"] == ["hand-edited t.md"]
-    assert cli("main", "get")[1]["main"]["title"] == "set by hand"
-    assert [i["ref"] for i in cli("list")[1]["items"]] == ["P1", "P3", "P4", "P5"]
-    assert "P2 ·" not in view.read_text(encoding="utf-8")
-    assert "reconciled" not in cli("list")[1]  # taken in once
+def test_import_rejects_a_closed_concern_with_an_unanswered_choice(api, home, ocd):
+    propose(api, create(api))
+    export = ok(api, "export", {"include_history": True})
+    row = export["snapshot"]["tables"]["concerns"][0]
+    item = json.loads(row["data"])
+    item.update(lifecycle="closed", closure={"kind": "resolved", "ref": "claim", "evidence": "A claim without an answer"})
+    row["data"] = ocd.canonical(item)
+    export["digest"] = ocd.digest(export["snapshot"])
+    with pytest.raises(ocd.Invalid, match="CLOSED_WITH_UNANSWERED_DECISION"):
+        ocd.validate_snapshot(export)
 
 
-def test_a_pre_import_copy_written_back_closes_nothing_and_duplicates_nothing(cli, home):
-    """An old-skill session read the Markdown before the import and writes it back whole, minus the line it
-    handled. The copy has no store revision, so the store cannot tell a removal from a line it never showed."""
-    view = home / "t.md"
-    view.write_text(LEGACY, encoding="utf-8")
-    assert cli("import-md", view)[0] == 0
-    assert cli("done", "P2", "--kind", "ticket", "--ref", "#440", "--expected-version", 1, "--request-id", "d")[0] == 0
-    copy = LEGACY.replace(f"- {LEGACY_PARKED[0]}\n", "") + "- a line the old session added\n"
-    view.write_text(copy, encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0
-    reconciled = listed["reconciled"]
-    assert reconciled["parked"] == ["P8"] and "closed" not in reconciled and "main" not in reconciled
-    assert reconciled["ignored"] == ["P2: done; a closed item is never reopened"]
-    assert Path(reconciled["no_revision"]).read_text(encoding="utf-8") == copy
-    assert [i["ref"] for i in listed["items"]] == ["P1", "P3", "P4", "P5", "P6", "P7", "P8"]
-    assert cli("show", "P2")[1]["item"]["receipt"] == {"kind": "ticket", "ref": "#440"}
-
-
-def _rendered_copy(cli, home):
-    """The view as a session reads it now: its header carries the store revision it was rendered at."""
-    assert cli("render")[0] == 0
-    return (home / "t.md").read_text(encoding="utf-8")
-
-
-def test_a_copy_written_back_keeps_items_parked_after_it(cli, home):
-    park(cli, "old one", "r1")
-    park(cli, "old two", "r2")
-    copy = _rendered_copy(cli, home)
-    newer = park(cli, "parked after the copy was read", "r3")
-    (home / "t.md").write_text("\n".join(l for l in copy.splitlines() if not l.startswith("- P1 ·")) + "\n",
-                               encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0 and listed["reconciled"] == {"closed": ["P1"]}
-    assert [i["ref"] for i in listed["items"]] == ["P2", newer["ref"]]
-
-
-def test_a_stale_line_for_an_item_changed_after_the_copy_changes_nothing(cli, home):
-    park(cli, "one", "r1", "--source", "s1")
-    copy = _rendered_copy(cli, home)
-    assert cli("add-source", "P1", "--source", "s2", "--expected-version", 1, "--request-id", "a")[0] == 0
-    (home / "t.md").write_text(copy + "- a new line\n", encoding="utf-8")
-    code, listed = cli("list")
-    reconciled = listed["reconciled"]
-    assert code == 0 and reconciled["stale"] == ["P1"] and reconciled["parked"] == ["P2"]
-    assert "edited" not in reconciled and "closed" not in reconciled
-    assert Path(reconciled["set_aside"][0]).read_text(encoding="utf-8") == copy + "- a new line\n"
-    p1 = cli("show", "P1")[1]["item"]
-    assert (p1["source_refs"], p1["version"]) == (["s1", "s2"], 2)
-
-
-def test_an_edited_main_line_from_before_a_later_main_set_is_set_aside(cli, home):
-    assert cli("main", "set", "--title", "M-3a", "--next-step", "first", "--expected-version", 0,
-               "--request-id", "m1")[0] == 0
-    copy = _rendered_copy(cli, home)
-    assert cli("main", "set", "--next-step", "second", "--expected-version", 1, "--request-id", "m2")[0] == 0
-    edited = copy.replace("- next step: first", "- next step: first, edited by hand")
-    (home / "t.md").write_text(edited, encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0 and "main" not in listed["reconciled"]
-    assert Path(listed["reconciled"]["main_conflict"]).read_text(encoding="utf-8") == edited
-    assert Path(listed["reconciled"]["main_conflict"]).name.startswith("t.md.stale-")
-    main = cli("main", "get")[1]["main"]
-    assert (main["title"], main["next_step"], main["version"]) == ("M-3a", "second", 2)
-
-
-def test_a_view_without_its_header_closes_nothing(cli, home):
-    for n in (1, 2):
-        park(cli, f"item {n}", f"r{n}")
-    lines = _rendered_copy(cli, home).splitlines()[1:]  # rewritten from scratch: no generated header
-    (home / "t.md").write_text("\n".join(l for l in lines if not l.startswith("- P1 ·")) + "\n- added\n",
-                               encoding="utf-8")
-    code, listed = cli("list")
-    reconciled = listed["reconciled"]
-    assert code == 0 and "closed" not in reconciled and reconciled["parked"] == ["P3"]
-    assert Path(reconciled["no_revision"]).exists()
-    assert [i["ref"] for i in listed["items"]] == ["P1", "P2", "P3"]
-
-
-def test_a_view_without_its_parked_section_is_set_aside_not_emptied(cli, home):
-    park(cli, "one", "r1")
-    view = home / "t.md"
-    view.write_text("oops\n", encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0 and [i["ref"] for i in listed["items"]] == ["P1"]
-    assert Path(listed["reconciled"]["unreadable"]).read_text(encoding="utf-8") == "oops\n"
-    assert "- P1 · one" in view.read_text(encoding="utf-8")
-
-
-def _write_without(view, text, *prefixes, extra=""):
-    view.write_text("\n".join(l for l in text.splitlines() if not l.startswith(prefixes)) + "\n" + extra,
-                    encoding="utf-8")
-
-
-def test_a_copy_does_not_close_an_item_ruled_or_taken_after_it(cli, home):
-    park(cli, "one", "r1")
-    park(cli, "two", "r2")
-    copy = _rendered_copy(cli, home)
-    assert cli("decide", "P1", "--ref", "owner Q1: do it", "--expected-version", 1, "--request-id", "q",
-               "--by", "s3")[0] == 0
-    code, taken = cli("take", "P2", "--expected-version", 1, "--request-id", "t", "--by", "s2")
-    _write_without(home / "t.md", copy, "- P1 ·", "- P2 ·")
-    code, listed = cli("list")
-    reconciled = listed["reconciled"]
-    assert code == 0 and reconciled["stale"] == ["P1", "P2"] and "closed" not in reconciled
-    assert Path(reconciled["set_aside"][0]).read_text(encoding="utf-8").count("- P") == 0
-    assert [(i["ref"], i["status"]) for i in listed["items"]] == [("P1", "open"), ("P2", "taken")]
-    assert cli("done", "P2", "--kind", "pr", "--ref", "#500", "--expected-version", 2, "--request-id", "d",
-               "--token", taken["token"], "--by", "s2")[0] == 0
-
-
-def test_the_change_racing_a_hand_removal_is_not_closed_by_it(ocd, cli, home, monkeypatch):
-    park(cli, "one", "r1")
-    view = home / "t.md"
-    removed = "\n".join(l for l in view.read_text(encoding="utf-8").splitlines() if not l.startswith("- P1 ·")) + "\n"
-    synced = ocd.Store.sync
-
-    def sync_then_hand_edit(self):  # an old-skill session writes between this command's sync and its change
-        synced(self)
-        view.write_text(removed, encoding="utf-8")
-    monkeypatch.setattr(ocd.Store, "sync", sync_then_hand_edit)
-    code, out = cli("take", "P1", "--expected-version", 1, "--request-id", "t1", "--by", "s2")
-    monkeypatch.setattr(ocd.Store, "sync", synced)
-    assert code == 0 and out["reconciled"]["stale"] == ["P1"] and "closed" not in out["reconciled"]
-    item = cli("show", "P1")[1]["item"]
-    assert (item["status"], item["version"]) == ("taken", 2)
-
-
-def test_count_reports_what_it_took_in_on_standard_error(ocd, cli, home, capsys):
-    park(cli, "one", "r1")
-    park(cli, "two", "r2")
-    _write_without(home / "t.md", _rendered_copy(cli, home), "- P1 ·")
-    assert ocd.main(["count"]) == 0
-    printed = capsys.readouterr()
-    assert printed.out == "1\n"
-    assert json.loads(printed.err.strip().splitlines()[-1]) == {"reconciled": {"closed": ["P1"]}}
-    assert ocd.main(["count"]) == 0 and capsys.readouterr().err == ""
-
-
-def test_a_failed_change_still_reports_the_reconcile_it_committed(cli, home):
-    for n in (1, 2, 3):
-        park(cli, f"item {n}", f"r{n}")
-    _write_without(home / "t.md", _rendered_copy(cli, home), "- P2 ·")
-    code, out = cli("done", "P3", "--kind", "pr", "--ref", "#9", "--expected-version", 7, "--request-id", "dd")
-    assert code == 3 and out["reconciled"] == {"closed": ["P2"]}
-
-
-def test_a_line_naming_a_closed_or_listed_item_with_new_text_is_parked_citing_it(cli, home):
-    for n in (1, 2, 3):
-        park(cli, f"item {n}", f"r{n}")
-    assert cli("done", "P3", "--kind", "resolved", "--ref", "abc", "--expected-version", 1, "--request-id", "d")[0] == 0
-    copy = _rendered_copy(cli, home)
-    (home / "t.md").write_text(copy + "- P3 · new finding: nightly_recon missing from jobs.yaml\n"
-                               "- P2 · another finding: webhook retries every 5s\n- P2 · item 2\n", encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0 and listed["reconciled"]["parked"] == ["P4", "P5"]
-    assert listed["reconciled"]["ignored"] == ["P2: listed twice"]
-    p4, p5 = cli("show", "P4")[1]["item"], cli("show", "P5")[1]["item"]
-    assert (p4["summary"], p4["source_refs"]) == ("P3 · new finding: nightly_recon missing from jobs.yaml",
-                                                  ["hand-edited t.md; cites P3"])
-    assert p5["source_refs"] == ["hand-edited t.md; cites P2"]
-    assert cli("show", "P2")[1]["item"]["version"] == 1
-
-
-def test_an_edit_to_an_item_closed_after_the_copy_is_set_aside(cli, home):
-    park(cli, "one", "r1")
-    park(cli, "two", "r2")
-    copy = _rendered_copy(cli, home)
-    assert cli("done", "P2", "--kind", "ticket", "--ref", "#9", "--expected-version", 1, "--request-id", "d")[0] == 0
-    edited = copy.replace("- P2 · two", "- P2 · two; also seen in run 77 (new crash signature)")
-    (home / "t.md").write_text(edited, encoding="utf-8")
-    code, listed = cli("list")
-    reconciled = listed["reconciled"]
-    assert code == 0 and reconciled["stale"] == ["P2"] and "parked" not in reconciled
-    assert "run 77" in Path(reconciled["set_aside"][0]).read_text(encoding="utf-8")
-    assert [i["ref"] for i in listed["items"]] == ["P1"]
-
-
-def test_sections_the_store_does_not_read_are_kept_in_a_copy(cli, home):
-    park(cli, "one", "r1")
-    (home / "t.md").write_text(_rendered_copy(cli, home) + "\n## Cleared\n- item zero -> filed #812\n",
-                               encoding="utf-8")
-    reconciled = cli("list")[1]["reconciled"]
-    assert reconciled["other_sections"] == ["cleared"]
-    assert "filed #812" in Path(reconciled["set_aside"][0]).read_text(encoding="utf-8")
-
-
-@pytest.mark.parametrize("marked", ["- ~~{line}~~ handled: filed #812", "- [x] {line}", "* {line}"])
-def test_a_marked_up_line_still_stands_for_its_item(cli, home, marked):
-    park(cli, "one", "r1", "--source", "s1")
-    park(cli, "two", "r2")
-    line = "P1 · one · sources: s1"
-    (home / "t.md").write_text(_rendered_copy(cli, home).replace("- " + line, marked.format(line=line)),
-                               encoding="utf-8")
-    code, listed = cli("list")
-    assert code == 0 and listed["reconciled"] == {"edited": ["P1"]}
-    assert [(i["ref"], i["status"]) for i in listed["items"]] == [("P1", "open"), ("P2", "open")]
-    assert cli("show", "P1")[1]["item"]["source_refs"][-1].endswith(marked.format(line=line).removeprefix("- "))
-
-
-def test_a_view_from_a_render_that_never_committed_is_set_aside_not_taken_in(ocd, cli, home):
-    park(cli, "one", "r1")
-    park(cli, "two", "r2")
-    view = home / "t.md"
-    uncommitted = re.sub(r"store revision \d+", "store revision 999", view.read_text(encoding="utf-8"))
-    _write_without(view, uncommitted, "- P1 ·")
-    code, listed = cli("list")
-    reconciled = listed["reconciled"]
-    assert code == 0 and set(reconciled) == {"uncommitted_view", "set_aside"}
-    assert [i["ref"] for i in listed["items"]] == ["P1", "P2"] and "- P1 · one" in view.read_text(encoding="utf-8")
-
-
-def test_an_earlier_render_nobody_edited_is_only_written_again(cli, home):
-    """A command that died after COMMIT, or whose write a later command overtook, leaves an older render."""
-    park(cli, "one", "r1")
-    view = home / "t.md"
-    older = view.read_bytes()
-    park(cli, "two", "r2")
-    assert cli("done", "P1", "--kind", "pr", "--ref", "#41", "--expected-version", 1, "--request-id", "d")[0] == 0
-    view.write_bytes(older)
-    code, listed = cli("list")
-    assert code == 0 and "reconciled" not in listed
-    assert [i["ref"] for i in listed["items"]] == ["P2"] and "P1 ·" not in view.read_text(encoding="utf-8")
-
-
-def test_a_ruling_on_a_taken_item_is_recorded_and_a_drop_waits_for_its_holder(cli):
-    park(cli, "one", "r1", "--needs-owner")
-    assert cli("take", "P1", "--expected-version", 1, "--request-id", "t", "--by", "s2")[0] == 0
-    code, out = cli("decide", "P1", "--ref", "questionnaire Q1: drop", "--expected-version", 2, "--request-id", "q")
-    assert code == 0 and (out["item"]["status"], out["item"]["needs_owner"]) == ("taken", False)
-    code, out = cli("drop", "P1", "--decision", "questionnaire Q1: drop", "--expected-version", 3, "--request-id", "x")
-    assert code == 3 and "held by s2" in out["message"]
-
-
-def test_a_lease_token_goes_only_to_its_take_and_works_only_for_its_holder(cli):
-    park(cli, "one", "r1")
-    code, taken = cli("take", "P1", "--expected-version", 1, "--request-id", "t1", "--by", "s2")
-    code, out = cli("take", "P1", "--expected-version", 5, "--request-id", "t1", "--by", "s3")
-    assert code == 3 and "token" not in out["original"] and out["original"]["item"]["ref"] == "P1"
-    code, out = cli("done", "P1", "--kind", "pr", "--ref", "#1", "--expected-version", 2, "--request-id", "d1",
-                    "--token", taken["token"], "--by", "s3")
-    assert code == 3 and "stale holder" in out["message"]
-    assert cli("done", "P1", "--kind", "pr", "--ref", "#1", "--expected-version", 2, "--request-id", "d2",
-               "--token", taken["token"], "--by", "s2")[0] == 0
-
-
-def test_import_md_keeps_a_main_line_set_since_and_sets_the_file_aside(cli, home):
-    view = home / "t.md"
-    view.write_text(LEGACY, encoding="utf-8")
-    assert cli("import-md", view)[0] == 0
-    assert cli("main", "set", "--next-step", "ship PR #500 (owner ruled 09-29)", "--expected-version", 1,
-               "--request-id", "m")[0] == 0
-    older = home / "older-copy.md"
-    older.write_text(LEGACY.replace(LONG_NEXT_STEP, "write the design (older)"), encoding="utf-8")
-    code, out = cli("import-md", older)
-    assert code == 0 and out["main"] == "conflict"
-    assert "write the design (older)" in Path(out["main_conflict"]).read_text(encoding="utf-8")
-    main = cli("main", "get")[1]
-    assert (main["main"]["next_step"], main["version"]) == ("ship PR #500 (owner ruled 09-29)", 2)
-
-
-def test_import_md_matches_items_already_in_the_store(cli, home):
-    view = home / "t.md"
-    view.write_text(LEGACY, encoding="utf-8")
-    assert cli("import-md", view)[0] == 0
-    view.write_text(LEGACY + "- c: finding\n- e: kept\n", encoding="utf-8")  # an old session's pre-import copy
-    assert cli("list")[1]["reconciled"]["parked"] == ["P8", "P9"]
-    assert cli("done", "P8", "--kind", "ticket", "--ref", "#77", "--expected-version", 1, "--request-id", "d")[0] == 0
-    later = home / "later-copy.md"
-    later.write_text(LEGACY + "- c: finding\n- e: kept\n- d: another\n", encoding="utf-8")
-    code, out = cli("import-md", later)
-    assert code == 0 and out["imported"] == ["P10"] and out["already"][-1] == "P9"
-    assert out["ignored"] == ["P8: done; a closed item is never reopened"]
-    assert cli("count") == (0, "9")
-
-
-def test_import_md_refuses_a_parked_heading_with_extra_words(cli, home):
-    view = home / "t.md"
-    view.write_text("## Main line\n- title: X\n\n## Parked (this machine only)\n- a: pending finding\n",
-                    encoding="utf-8")
-    code, out = cli("import-md", view)
-    assert code == 2 and "`## Parked`" in out["message"]
-    assert not (home / "t.db").exists()
+@pytest.mark.parametrize("command", ["park", "count", "decide", "done", "drop", "import-md"])
+def test_obsolete_commands_require_client_upgrade(ocd, home, capsys, command):
+    assert ocd.main([command]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["reason"] == "CLIENT_UPGRADE_REQUIRED"
+    assert not (home / "sample.db").exists()
