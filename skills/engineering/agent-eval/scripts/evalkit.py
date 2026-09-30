@@ -1283,7 +1283,7 @@ def batch_dir(batch):
 
 
 # Commands that write a batch's ledgers or run directories.
-BATCH_WRITERS = ("run", "adopt", "judge", "calibrate", "recompute")
+BATCH_WRITERS = ("run", "adopt", "judge", "calibrate", "recompute", "rescore")
 
 
 def hold_batch(batch):
@@ -1712,6 +1712,85 @@ def run_hidden_tests(case, root, out, timeout):
             **parse_junit(junit, ht["expected"], ht.get("reference_only", []))}
 
 
+NO_TEST_REPORT = "hidden tests produced no report"
+
+
+def rescore_targets(rows, run_ids=None):
+    """The implementation rows to score again: those named, else every one whose hidden tests timed out."""
+    impl = {k: r for k, r in rows.items() if r.get("kind") == "implement"}
+    if run_ids:
+        missing = sorted(set(run_ids) - set(impl))
+        if missing:
+            raise EvalError(f"not implementation runs of this batch: {', '.join(missing)}")
+        return [impl[k] for k in run_ids]
+    return [r for r in impl.values() if (r.get("tests") or {}).get("timed_out")]
+
+
+def rescored(row, tests, at=None):
+    """`row` with new hidden-test results; validity changes only through the tests' own reason."""
+    old = row.get("tests") or {}
+    reasons = [r for r in row.get("reasons") or [] if r != NO_TEST_REPORT]
+    if not tests["junit"] and not tests["timed_out"]:
+        reasons.append(NO_TEST_REPORT)
+    return {**row, "tests": tests, "status": "invalid" if reasons else "valid", "reasons": reasons,
+            "rescore": {"at": at or now(), "host": HOST, "sandbox": SANDBOX, "kit_digest": KIT_DIGEST,
+                        "previous": {k: old.get(k) for k in ("passed", "expected", "timed_out", "elapsed_s")}}}
+
+
+def rebuild_tree(case, root, patch):
+    """The tree a run left: a fresh snapshot with the run's saved diff applied."""
+    wt = prepare_snapshot(case, root)
+    for att in case.get("attachments", []):  # the diff carries them as the candidate left them
+        if att.get("place"):
+            (wt / att["place"]).unlink(missing_ok=True)
+    if Path(patch).stat().st_size:
+        proc = subprocess.run(["git", "-C", str(wt), "apply", "--whitespace=nowarn", str(patch)],
+                              capture_output=True, text=True)
+        if proc.returncode:
+            raise EvalError(f"{patch} does not apply to a fresh snapshot: {proc.stderr.strip()[:300]}")
+    return wt
+
+
+def cmd_rescore(args):
+    """Run the hidden tests again on each run's saved diff, in a fresh snapshot; appends the new record.
+
+    The hidden tests share the machine with everything else on it. When the host is saturated a
+    suite that passes in four minutes can outlast `implement.test_timeout`, and the run is then
+    recorded as valid with no test passed although nothing in the candidate hung. The diff is the
+    candidate's whole change against the snapshot, so applying it to a fresh snapshot rebuilds the
+    tree the tests saw. The case must be unchanged since the run (same case digest).
+    """
+    check_batch_text(args.batch)
+    rows = load_records(args.batch)
+    targets = rescore_targets(rows, args.runs)
+    print(f"batch {args.batch}: {len(targets)} implementation runs to score again")
+    if args.dry_run or not targets:
+        for r in targets:
+            print(r["run_id"])
+        return 0
+    _, cases = load_cases(sorted({r["case"] for r in targets}))
+    timeout = impl_cfg().get("test_timeout", 900)
+    writer = RecordWriter(batch_dir(args.batch) / "runs.jsonl", stamp=False)
+    for row in targets:
+        case = cases[row["case"]]
+        digest = case_digest(case)
+        if row.get("case_digest") and row["case_digest"] != digest:
+            raise EvalError(f"{row['run_id']}: case {case['id']} changed since the run "
+                            f"({row['case_digest']} -> {digest}); its tests no longer score that run")
+        out = batch_dir(args.batch) / "runs" / row["run_id"]
+        root = run_dir(args.batch, row["run_id"])
+        rebuild_tree(case, root, out / "diff.patch")
+        prepare_sandbox(root)
+        new = rescored(row, run_hidden_tests(case, root, out, timeout))
+        shutil.rmtree(root, ignore_errors=True)
+        writer.append(new)
+        old, got = new["rescore"]["previous"], new["tests"]
+        print(f"{row['run_id']:40} tests {old['passed']}/{old['expected']}{' (timed out)' if old['timed_out'] else ''}"
+              f" -> {got['passed']}/{got['expected']}{' (timed out)' if got['timed_out'] else ''} "
+              f"{got['elapsed_s']}s {new['status']}", flush=True)
+    return 0
+
+
 def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plans):
     case = cases[run["case"]]
     cand, effort, mode = run["candidate"], run["effort"], run["mode"]
@@ -1771,7 +1850,7 @@ def execute_impl_run(run, batch, common, cases, impl, prices, key, timeout, plan
     record["chain_cost_usd"] = None if record["cost_usd"] is None else round(record["cost_usd"] + plan_cost, 6)
     reasons = validity(record, cand, effort, tools=IMPL_TOOLS)
     if not tests["junit"] and not tests["timed_out"]:
-        reasons.append("hidden tests produced no report")
+        reasons.append(NO_TEST_REPORT)
     record.update({"status": "invalid" if reasons else "valid", "reasons": reasons, "finished_at": now()})
     return record
 
@@ -3000,6 +3079,12 @@ def main(argv=None):
     rec = sub.add_parser("recompute", help="re-derive codex usage, cost and validity from saved rollouts")
     rec.add_argument("--batch", required=True)
     rec.set_defaults(func=cmd_recompute)
+
+    res = sub.add_parser("rescore", help="implementation runs: run the hidden tests again on each saved diff")
+    res.add_argument("--batch", required=True)
+    res.add_argument("--runs", type=csv, help="run ids (default: every run whose hidden tests timed out)")
+    res.add_argument("--dry-run", action="store_true")
+    res.set_defaults(func=cmd_rescore)
 
     iso = sub.add_parser("check-isolation", help="prepare one case and run the isolation check")
     iso.add_argument("--case", required=True)

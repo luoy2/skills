@@ -188,3 +188,30 @@ def test_recompute_refuses_an_implementation_batch_and_leaves_it_untouched(kit, 
     with pytest.raises(kit.EvalError, match="planning runs only"):
         kit.cmd_recompute(type("Args", (), {"batch": "i1"})())
     assert ledger.read_bytes() == before
+
+
+def _impl_row(run_id, tests, reasons=(), kind="implement"):
+    return {"run_id": run_id, "kind": kind, "status": "invalid" if reasons else "valid", "reasons": list(reasons),
+            "tests": tests}
+
+
+def test_rescore_picks_every_run_whose_hidden_tests_timed_out_unless_runs_are_named(kit):
+    """A saturated host cut a four-minute suite at the test timeout; those runs read as 0 passed."""
+    rows = {"a": _impl_row("a", {"timed_out": True, "passed": 0}), "b": _impl_row("b", {"timed_out": False, "passed": 5}),
+            "p": {"run_id": "p", "status": "valid"}}
+    assert [r["run_id"] for r in kit.rescore_targets(rows)] == ["a"]
+    assert [r["run_id"] for r in kit.rescore_targets(rows, ["b"])] == ["b"]
+    with pytest.raises(kit.EvalError, match="p"):
+        kit.rescore_targets(rows, ["p"])
+
+
+def test_a_rescored_run_keeps_its_other_reasons_and_records_what_it_replaced(kit):
+    before = {"timed_out": True, "passed": 0, "expected": 285, "elapsed_s": 900.0, "junit": False}
+    after = {"timed_out": False, "passed": 283, "expected": 285, "elapsed_s": 260.0, "junit": True}
+    new = kit.rescored(_impl_row("a", before), after, at="t")
+    assert new["status"] == "valid" and new["tests"] == after
+    assert new["rescore"]["previous"] == {"passed": 0, "expected": 285, "timed_out": True, "elapsed_s": 900.0}
+    broken = kit.rescored(_impl_row("a", before, reasons=["model mismatch"]), after)
+    assert broken["status"] == "invalid" and broken["reasons"] == ["model mismatch"]
+    silent = kit.rescored(_impl_row("a", before), {**after, "junit": False})
+    assert silent["reasons"] == [kit.NO_TEST_REPORT]

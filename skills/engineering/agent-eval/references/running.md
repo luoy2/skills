@@ -29,6 +29,14 @@ implementer's time limit is `--timeout` if given, else `implement.timeouts[<effo
 else 3600 s; every row records the `timeout_s` it ran under. One limit for every
 effort cut four high-effort runs short at 267–269 of 285 tests.
 
+The hidden tests have their own limit, `implement.test_timeout` (900 s). A run whose tests
+outlast it counts as valid with no test passed, which is right when the candidate's code
+hangs and wrong when the machine was saturated. `rescore --batch <b>` runs the hidden tests
+again on each such run's saved diff in a fresh snapshot (`--runs` names others) and appends
+the new record with the previous result under `rescore`; the case must be unchanged since the
+run. Rescore on a quiet machine, and compare `elapsed_s` with a run of the same case that
+finished in time before calling a timeout the candidate's.
+
 One process writes a batch at a time: `run`, `adopt`, `judge`, `calibrate` and `recompute`
 lock the batch directory and refuse while another process holds it. Run planning and
 implementation batches side by side under different batch names.

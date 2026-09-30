@@ -137,3 +137,50 @@ def test_a_second_writer_of_a_batch_is_refused_until_the_first_exits(kit, monkey
         holder.communicate("\n", timeout=30)
     kit.hold_batch("b").close()  # the lock left with the process
 
+
+
+def test_rescore_rebuilds_the_tree_the_candidate_left_from_its_saved_diff(kit, monkeypatch, tmp_path):
+    """Scoring again must see the candidate's tree: its edits, new files, deletions and placed attachments."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("x = 1\n")
+    (repo / "gone.py").write_text("old\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    (case_dir / "plan.md").write_text("plan\n")
+    case = {"snapshot": _git(repo, "rev-parse", "HEAD"), "dir": case_dir,
+            "attachments": [{"file": "plan.md", "place": "docs/plan.md"}]}
+    monkeypatch.setattr(kit, "REPO", repo)
+    monkeypatch.setattr(kit, "OVERLAY_DIR", None)
+    wt = kit.prepare_snapshot(case, tmp_path / "run")
+    base = _git(wt, "rev-parse", "HEAD")
+    (wt / "a.py").write_text("x = 2\n")
+    (wt / "new.py").write_text("y = 1\n")
+    (wt / "gone.py").unlink()
+    (wt / "docs" / "plan.md").write_text("plan, amended\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    kit.capture_diff(wt, base, out)
+    left = {p.relative_to(wt).as_posix(): p.read_text() for p in wt.rglob("*") if p.is_file() and ".git" not in p.parts}
+    again = kit.rebuild_tree(case, tmp_path / "again", out / "diff.patch")
+    rebuilt = {p.relative_to(again).as_posix(): p.read_text() for p in again.rglob("*")
+               if p.is_file() and ".git" not in p.parts}
+    assert rebuilt == left
+
+
+def test_rescore_refuses_a_diff_that_does_not_apply(kit, monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("x = 1\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    monkeypatch.setattr(kit, "REPO", repo)
+    monkeypatch.setattr(kit, "OVERLAY_DIR", None)
+    patch = tmp_path / "diff.patch"
+    patch.write_text("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-x = 9\n+x = 2\n")
+    with pytest.raises(kit.EvalError, match="does not apply"):
+        kit.rebuild_tree({"snapshot": _git(repo, "rev-parse", "HEAD"), "dir": tmp_path}, tmp_path / "run", patch)
