@@ -36,6 +36,7 @@ import ast
 import builtins
 import concurrent.futures
 import datetime as dt
+import fcntl
 import glob
 import hashlib
 import html
@@ -1261,6 +1262,34 @@ def now():
 
 def batch_dir(batch):
     return RESULTS / batch
+
+
+# Commands that write a batch's ledgers or run directories.
+BATCH_WRITERS = ("run", "adopt", "judge", "calibrate", "recompute")
+
+
+def hold_batch(batch):
+    """Lock the batch for this process's lifetime, or refuse: one process writes a batch at a time.
+
+    Two writers of one batch share its run directories and scratch. On 2026-09-30 a second
+    `run` of a batch, started seconds after the first, left every run it touched twice in the
+    ledger and scored runs against worktrees the other process had reset. The lock is the
+    open file returned; the operating system drops it when the process exits, however it ends.
+    """
+    d = batch_dir(batch)
+    d.mkdir(parents=True, exist_ok=True)
+    fh = open(d / ".lock", "a+", encoding="utf-8")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fh.seek(0)
+        holder = fh.read().strip() or "another process"
+        fh.close()
+        raise EvalError(f"batch {batch} is being written by {holder}; one process writes a batch at a time") from None
+    fh.truncate(0)
+    fh.write(f"pid {os.getpid()} on {socket.gethostname()} since {now()}\n")
+    fh.flush()
+    return fh
 
 
 def load_records(batch, name="runs.jsonl"):
@@ -2990,6 +3019,7 @@ def main(argv=None):
     try:
         if args.cmd != "text" or Path(args.config).exists():
             configure(args.config, args.host)
+        lock = hold_batch(args.batch) if args.cmd in BATCH_WRITERS and not getattr(args, "dry_run", False) else None  # noqa: F841
         return args.func(args)
     except EvalError as exc:
         print(f"error: {exc}", file=sys.stderr)

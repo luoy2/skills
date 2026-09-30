@@ -29,6 +29,10 @@ implementer's time limit is `--timeout` if given, else `implement.timeouts[<effo
 else 3600 s; every row records the `timeout_s` it ran under. One limit for every
 effort cut four high-effort runs short at 267–269 of 285 tests.
 
+One process writes a batch at a time: `run`, `adopt`, `judge`, `calibrate` and `recompute`
+lock the batch directory and refuse while another process holds it. Run planning and
+implementation batches side by side under different batch names.
+
 Measuring an instruction change (a new AGENTS.md or SOP): keep cases and snapshots
 fixed and set `overlay_dir` to a folder that mirrors repository paths. Its files
 replace or join every snapshot before the snapshot commit, so an implementer's diff
