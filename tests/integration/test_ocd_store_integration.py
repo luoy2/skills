@@ -12,7 +12,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "skills/engineering/i-have-ocd/scripts/ocd.py"
-OLD_REF = "b6e09b8"  # assignment's origin/main base; never follow a moving remote in a fixture
+# Verbatim copy of the helper at b6e09b8, the last format-1 writer. A file, not `git show`,
+# because CI checks out a shallow clone without that history.
+OLD_HELPER = ROOT / "tests/fixtures/i_have_ocd_format1.py"
 
 
 def env(home, **extra):
@@ -140,10 +142,8 @@ def test_disk_crash_rolls_back_or_replays_atomic_request_receipt(tmp_path):
 
 
 def old_helper(home):
-    result = subprocess.run(["git", "show", f"{OLD_REF}:skills/engineering/i-have-ocd/scripts/ocd.py"], cwd=ROOT,
-                            capture_output=True, text=True, check=True, timeout=10)
     path = home / "format-1.py"
-    path.write_text(result.stdout)
+    path.write_text(OLD_HELPER.read_text())
     return path
 
 
