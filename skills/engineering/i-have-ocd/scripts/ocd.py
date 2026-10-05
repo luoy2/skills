@@ -27,7 +27,6 @@ from pathlib import Path
 CONTRACT = "i-have-ocd/1"
 SCHEMA_VERSION = 2
 BUSY_SECONDS = 10.0
-MAX_REVIEW = 4
 PAGE_SIZE = 100
 JSON_TABLES = ("concerns", "decisions", "rulings", "handoffs", "reviews", "leases", "main_lines")
 SCHEMA = (
@@ -745,14 +744,13 @@ class Store:
                     result["lease"] = self.acquire("review", active["id"])
                 return result
             previous = [r for r in self.rows("reviews") if r["owner_scope"] == data["owner_scope"]]
-            if previous and (data.get("previous_review_id") != previous[-1]["id"] or trigger["ref"] == previous[-1]["trigger"]["ref"]):
-                raise Conflict("NEXT_BATCH_REQUIRES_EXPLICIT_REQUEST")
+            if previous and trigger["ref"] == previous[-1]["trigger"]["ref"]:
+                raise Conflict("REVIEW_NEEDS_NEW_TRIGGER")
             eligible = [d for d in self.rows("decisions") if d["state"] == "owner_pending" and d["owner_scope"] == data["owner_scope"]]
-            # Count distinct decisions, never groups, lanes, or concern IDs.
-            selected = eligible[:MAX_REVIEW]
+            # Every pending decision in the scope, across lanes: the human answers them in one review.
             review = {"id": new_id(), "version": 1, "owner_scope": data["owner_scope"], "trigger": trigger,
-                      "snapshot_revision": self.revision(), "snapshot": [{"id": d["id"], "version": d["version"]} for d in selected],
-                      "presented_ids": [], "answer_refs": [], "state": "active", "has_more": len(eligible) > MAX_REVIEW}
+                      "snapshot_revision": self.revision(), "snapshot": [{"id": d["id"], "version": d["version"]} for d in eligible],
+                      "presented_ids": [], "answer_refs": [], "state": "active"}
             self.put("reviews", review)
             return {"review": self.review_public(review), "lease": self.acquire("review", review["id"]), "resumed": False}
         review = self.cas(self.get("reviews", data.get("review_id")), expected["review"])
@@ -765,8 +763,6 @@ class Store:
             if not isinstance(proposed, list) or len(set(proposed)) != len(proposed) or set(proposed) - set(valid):
                 raise Conflict("REVIEW_SNAPSHOT_CHANGED")
             cumulative = list(dict.fromkeys(review["presented_ids"] + proposed))
-            if len(cumulative) > MAX_REVIEW:
-                raise Conflict("REVIEW_LIMIT_EXCEEDED")
             require(data, "presentation_ref")
             review = self.change("reviews", review, presented_ids=cumulative, presentation_ref=data["presentation_ref"])
         else:
@@ -786,7 +782,7 @@ class Store:
             if decision["state"] == "owner_pending" and decision["version"] == snapshot["version"]:
                 links = [r[0] for r in self.db.execute("SELECT concern_id FROM decision_links WHERE decision_id=?", (decision["id"],))]
                 decisions.append({**decision, "concern_ids": links})
-        return {**review, "decisions": decisions, "continuation": "explicit_request_only",
+        return {**review, "decisions": decisions,
                 "presenter_lease": redact(self.get("leases", self.lease_id("review", review["id"]), False))}
 
     def page(self, values, data):
@@ -812,7 +808,7 @@ class Store:
         if op == "capabilities":
             return {"contract": CONTRACT, "schema": 2, "delivery": "manual", "backend": "local",
                     "backend_id": self.meta("backend_id"), "store_id": self.meta("store_id"), "workspace_id": self.meta("workspace_id"),
-                    "max_review_decisions": MAX_REVIEW, "ops": sorted(READ_OPS | WRITE_OPS),
+                    "ops": sorted(READ_OPS | WRITE_OPS),
                     "roles": {"parent": "read/write", "child": "read/return_to_parent"}}
         if op in {"show", "find"}:
             if op == "find":
@@ -922,7 +918,7 @@ class Store:
                     lease.update(token_hash="fenced", expires_at=iso(utcnow()), fence=lease["fence"] + 1)
                     row["data"] = canonical(lease)
                 if table == "reviews":
-                    # Preserve the fixed batch; the next explicit start reacquires its presenter lease.
+                    # Preserve the fixed snapshot; the next explicit start reacquires its presenter lease.
                     row["data"] = canonical(json.loads(row["data"]))
                 columns = list(row)
                 self.db.execute(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})", tuple(row.values()))
@@ -1049,7 +1045,7 @@ def validate_snapshot(data):
     active_scopes = set()
     for review in decoded["reviews"].values():
         snapshot_ids = [d["id"] for d in review["snapshot"]]
-        if len(snapshot_ids) > MAX_REVIEW or len(set(snapshot_ids)) != len(snapshot_ids) or set(snapshot_ids) - ids["decisions"] or \
+        if len(set(snapshot_ids)) != len(snapshot_ids) or set(snapshot_ids) - ids["decisions"] or \
                 set(review["presented_ids"]) - set(snapshot_ids):
             raise Invalid("INVALID_REVIEW_SNAPSHOT")
         if review["state"] == "active":

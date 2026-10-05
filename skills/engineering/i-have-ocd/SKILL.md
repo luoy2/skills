@@ -54,10 +54,10 @@ parent and do not write this store, route work, or open a human review.
    is insufficient, feasible options with costs, a recommendation, and the
    consequence of not deciding. Do not ask the human who should handle ordinary
    engineering work. Open a review only when the human asks or a concrete
-   main-line blocker requires it. Read current decisions and present at most four
-   independent decisions in total, across lanes. Grouping does not reduce the
-   count. Do not automatically send another batch, including after answers,
-   resume, compaction, lease expiry, or a new message.
+   main-line blocker requires it. Read current decisions and present all of
+   them, across lanes, in that one review; when a question tool holds fewer per
+   call, continue with further calls in the same turn. Answers, resume,
+   compaction and lease expiry do not open another review.
 7. Record 'later' with the original answer and a reopening condition: explicit
    human reopening, a named dependency completing, or new evidence changing the
    consequence. Silence is not 'later'. Time elapsed and repeated reads never

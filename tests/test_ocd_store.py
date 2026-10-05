@@ -225,46 +225,47 @@ def test_stale_fence_cannot_write_even_with_current_item_version(api, ocd, monke
     assert "token" not in json.dumps(read)
 
 
-def test_one_review_counts_independent_decisions_across_all_lanes(api, ocd, monkeypatch):
+def test_one_review_presents_every_pending_decision_across_all_lanes(api, ocd, monkeypatch):
     for n in range(6):
         item = create(api, n, owner=f"lane-{n % 3}")
         propose(api, item, n, group="same-group")
-    start = {"owner_scope": "owner", "trigger": {"kind": "owner_request", "ref": "request-review-1"}, "previous_review_id": None}
+    start = {"owner_scope": "owner", "trigger": {"kind": "owner_request", "ref": "request-review-1"}}
     first = ok(api, "review.start", start)
     review = first["review"]
-    assert len(review["snapshot"]) == len(review["decisions"]) == 4 and review["has_more"]
+    assert len(review["snapshot"]) == len(review["decisions"]) == 6 and "has_more" not in review
     resumed = ok(api, "review.start", start, actor="actor-b")
     assert resumed["resumed"] and resumed["review"]["id"] == review["id"] and "lease" not in resumed
     present = {"review_id": review["id"], "presentation_ref": "questionnaire-1"}
     assert api("review.present", present, {"review": 1}, lease=first["lease"], actor="actor-b")[0] == 3
     presented = ok(api, "review.present", present, {"review": 1}, lease=first["lease"])["review"]
-    assert len(presented["presented_ids"]) == 4
+    assert len(presented["presented_ids"]) == 6
     clock = ocd.utcnow() + timedelta(hours=2)
     monkeypatch.setattr(ocd, "utcnow", lambda: clock)
     retaken = ok(api, "review.start", start, actor="actor-b")
-    assert retaken["review"]["id"] == review["id"] and len(retaken["review"]["snapshot"]) == 4
+    assert retaken["review"]["id"] == review["id"] and len(retaken["review"]["snapshot"]) == 6
     assert retaken["lease"]["fence"] > first["lease"]["fence"]
     assert api("review.finish", {"review_id": review["id"], "finish_ref": "finished"}, {"review": 2}, lease=first["lease"])[0] == 3
     ok(api, "review.finish", {"review_id": review["id"], "finish_ref": "finished"}, {"review": 2}, actor="actor-b", lease=retaken["lease"])
     assert api("review.start", start)[0] == 3
     assert len(ok(api, "list")["items"]) == 6
-    next_review = ok(api, "review.start", {**start, "trigger": {"kind": "owner_request", "ref": "explicit-continue"}, "previous_review_id": review["id"]})
+    next_review = ok(api, "review.start", {**start, "trigger": {"kind": "owner_request", "ref": "request-review-2"}})
     assert next_review["review"]["id"] != review["id"]
 
 
 def test_review_does_not_refill_a_changed_snapshot(api):
     item = create(api)
     decisions = []
-    for n in range(5):
+    for n in range(4):
         proposed = propose(api, item, n)
         item = proposed["item"]
         decisions.append(proposed["decision"])
     started = ok(api, "review.start", {"owner_scope": "owner", "trigger": {"kind": "main_line_blocker", "ref": "blocker"}})
+    late = propose(api, item, 4)["decision"]
     decision = decisions[0]
     ok(api, "decision.answer", {"decision_id": decision["id"], "option_id": "keep", "ruling_id": "ruling", "answer_ref": "answer"}, {"decision": 1})
     current = ok(api, "review.show", {"review_id": started["review"]["id"]})["review"]
     assert len(current["decisions"]) == 3 and len(current["snapshot"]) == 4
-    assert decisions[-1]["id"] not in {d["id"] for d in current["decisions"]}
+    assert late["id"] not in {d["id"] for d in current["decisions"]}
     assert "token" not in json.dumps(current)
 
 

@@ -153,8 +153,8 @@ responsible owner and a durable record; existing work is linked rather than
 queued again. Responsibility, delivery, human decisions and completion have
 separate states. A handoff or an ACK never answers a human question.
 
-An explicitly requested review presents at most four independent decisions
-across all lanes. Answers and resume do not start another batch. A real “later”
+An explicitly requested review presents every pending decision across all
+lanes at once. Answers and resume do not start another review. A real “later”
 answer has an event-based reopening condition. Urgent risks are raised immediately.
 Routine replies carry no global backlog count.
 

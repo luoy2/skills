@@ -73,7 +73,7 @@ request ID. It must never retry under a new ID or return an empty queue instead.
 
 Item writes include `result.item_id/item_version/attention_state/needs_owner`
 alongside the complete item. Decision and handoff writes also include their IDs
-and versions. Review results include the fixed batch fields directly and under
+and versions. Review results include the fixed snapshot fields directly and under
 `result.review`.
 
 ## Records and independent states
@@ -168,27 +168,28 @@ project-wide instruction. The old single main line is retained as legacy history
 and is not broadcast to every actor.
 
 `review start` requires `owner_scope` and
-`trigger={kind:owner_request|main_line_blocker,ref}`. A fixed snapshot contains at
-most four distinct decision IDs and their versions across all lanes in that
-scope. Grouping does not reduce the count. The responsible parent must split
-independent choices; a database cannot infer how many choices a sentence hides.
-Only one review per owner scope is active, enforced inside the write transaction.
-A simultaneous start returns that review. An expired presenter lease permits
-acquisition of the same batch, not a new batch. Other actors receive no token.
+`trigger={kind:owner_request|main_line_blocker,ref}`. A fixed snapshot contains
+every pending decision ID and its version across all lanes in that scope. The
+responsible parent must split independent choices; a database cannot infer how
+many choices a sentence hides. Only one review per owner scope is active,
+enforced inside the write transaction. A simultaneous start returns that review.
+An expired presenter lease permits acquisition of the same review, not a new
+one. Other actors receive no token.
 
 Before presentation the backend rechecks each decision's state and snapshot
 version, removes stale questions and does not refill. `present` and `finish`
 require the review version and presenter lease. Presentation IDs accumulate
-within the original four. Finishing may leave questions unanswered and does not
-answer them. To request another batch, provide the previous review ID and a new
-explicit trigger reference. Resume, answers, compaction, messages and expiry
-never automatically produce another questionnaire. `has_more` is a continuation
-hint for the presenter, not a global backlog broadcast.
+within the original snapshot. Finishing may leave questions unanswered and does
+not answer them. A later review needs a trigger reference other than the
+previous review's (`REVIEW_NEEDS_NEW_TRIGGER`). Resume, answers, compaction,
+messages and expiry never automatically produce another questionnaire. Reviews
+stored before snapshots held every pending decision may carry `has_more`; it is
+history, not a request to continue.
 
 List and history pages have at most 100 rows. Cursors bind an offset to a revision;
 a changed revision returns `CURSOR_REVISION_CHANGED` so a caller restarts the
-read rather than silently skipping records. Review batches have no automatic
-pagination. Counts appear only under explicit `--include-counts`, and distinguish
+read rather than silently skipping records. Review snapshots are not
+paginated. Counts appear only under explicit `--include-counts`, and distinguish
 work, pending owner decisions and later state.
 
 ## CLI and API
@@ -218,7 +219,7 @@ Every write below requires `--request-id R`.
 | decision link ID --data FILE | expected item and --expected-decision-version | decision_id, evidence_ref |
 | decision answer DECISION --data FILE | expected decision | option_id, answer_ref, ruling_id |
 | decision later / reopen / withdraw DECISION --data FILE | expected decision | State-specific evidence described above |
-| review start --data FILE | Create | owner_scope, trigger, optional previous_review_id |
+| review start --data FILE | Create | owner_scope, trigger |
 | review show ID | Read | Fixed snapshot with current valid questions |
 | review present / finish ID --data FILE | expected review, token/fence | presentation_ref and optional decision_ids / finish_ref |
 | urgent ID --data FILE | expected item | raise or notified payload |
@@ -342,7 +343,7 @@ local release restores whole snapshots, not shared incremental batches.
 `import apply --data FILE --expected-revision N --request-id R` restores only into
 an empty target at the expected revision. It preserves source identities and
 history, appends an import receipt, increments the cutover epoch and fences every
-imported lease. An active review keeps its fixed batch and can reacquire a
+imported lease. An active review keeps its fixed snapshot and can reacquire a
 presenter lease. A retry is idempotent. A changed or nonempty target conflicts;
 there is no silent merge with another store. No shared binding is implemented.
 
