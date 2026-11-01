@@ -172,3 +172,37 @@ def test_a_zone_this_system_cannot_load_prints_utc_and_says_so(qr, rows, capsys)
     captured = capsys.readouterr()
     assert "[09-20 00:00Z]" in captured.out
     assert "time zone Not/AZone unavailable here" in captured.err
+
+
+def test_a_hook_block_or_an_unreturned_call_is_not_the_owners_decline(qr, tmp_path, capsys):
+    q = _q("Q7 go?", ["Go (Recommended)", "Stop"])
+    entries = [
+        _ask("h", "2026-09-21T00:00:00Z", [q, _q("Q8 also?", ["Yes (Recommended)", "No"])]),
+        _answer("h", "2026-09-21T00:00:01Z", error="PreToolUse:AskUserQuestion hook error: [bash gate.sh]: "
+                "route this question to the coordinator"),
+        {"type": "user", "timestamp": "2026-09-21T00:00:30Z", "message": {"role": "user", "content": "carry on"}},
+        _ask("i", "2026-09-21T01:00:00Z", [q]),
+        _answer("i", "2026-09-21T01:00:02Z", error="[Tool call interrupted: the session ended before this call's "
+                "result was recorded]"),
+        _ask("j", "2026-09-21T02:00:00Z", [q]),
+        _answer("j", "2026-09-21T02:00:03Z", error="Tool permission request failed: connection reset"),
+        _ask("k", "2026-09-21T03:00:00Z", [q]),
+        _answer("k", "2026-09-21T03:00:04Z", error="The user doesn't want to proceed with this tool use. "
+                "The tool use was rejected."),
+    ]
+    projects = tmp_path / "projects"
+    _write_log(projects / "-proj" / "one.jsonl", entries)
+    out = tmp_path / "rows.jsonl"
+    qr.main(["extract", "--since", "2026-09-13T04:00:00Z", "--projects", str(projects), "--out", str(out)])
+    by_id = {r["id"]: r for r in qr.read_jsonl(out)}
+    assert [by_id[i]["kind"] for i in ("h#0", "h#1", "i#0", "j#0", "k#0")] == [
+        "hook_blocked", "hook_blocked", "missing", "error", "declined"]
+    capsys.readouterr()
+    qr.main(["stats", "--rows", str(out)])
+    stats = capsys.readouterr().out
+    assert "declined questionnaires: 1" in stats and "hook-blocked questionnaires: 1" in stats
+    assert "answered: 0:" in stats  # none of them enters the acceptance rate
+    qr.main(["leads", "--rows", str(out)])
+    leads = capsys.readouterr().out
+    assert "Q7 go?" in leads and leads.count("declined; then wrote") == 1  # only the owner's own refusal
+    assert "carry on" not in leads  # text after a hook block is not read as a reason to decline

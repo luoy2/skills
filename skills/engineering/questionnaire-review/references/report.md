@@ -6,6 +6,9 @@
   option and that the owner answered: took the recommendation, picked another
   option, or wrote their own answer. Multi-select questions, questions without a
   recommendation, and declined or dismissed questionnaires are reported beside it.
+  A questionnaire a hook blocked (`hook_blocked`), one the session ended before
+  answering (`missing`) and any other tool error (`error`) never reached the
+  owner: they are counted apart and are not declines.
 - **Answer time.** When taking the recommendation takes as long as overriding
   it, acceptance is read, not reflex. A much faster acceptance suggests the
   questions are routine enough to stop asking.
