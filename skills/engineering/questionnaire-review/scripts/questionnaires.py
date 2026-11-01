@@ -35,6 +35,12 @@ from pathlib import Path
 
 RECOMMENDED = re.compile(r"[(（]\s*(?:recommended|推荐)\s*[)）]\s*$", re.IGNORECASE)
 DISMISSED = "[User dismissed"
+# A tool error is the owner's refusal only when Claude Code says so. A hook that blocked the
+# call before the owner saw it, and a call the session ended before answering, are not the
+# owner's choice; any other error is kept apart as `error`.
+REJECTED = "The user doesn't want to proceed with this tool use"
+HOOK_BLOCKED = re.compile(r"^\s*PreToolUse:\S+ hook\b")
+INTERRUPTED = "[Tool call interrupted"
 KEEP_TEXT = 1000
 SECRET = re.compile(
     r"https?://\S*(?:hook|token|key|secret)\S*"
@@ -131,6 +137,17 @@ def calls_in(path):
         yield use_entry, use_block, None, None, before, ""
 
 
+def error_status(content):
+    """The status of a questionnaire whose tool result is an error."""
+    if "InputValidationError" in content:
+        return "invalid"
+    if HOOK_BLOCKED.match(content):
+        return "hook_blocked"
+    if content.lstrip().startswith(INTERRUPTED):
+        return "missing"
+    return "declined" if REJECTED in content else "error"
+
+
 def rows_for(use_entry, block, result_entry, result, before, after, project):
     questions = (block.get("input") or {}).get("questions") or []
     status = "missing"
@@ -139,7 +156,7 @@ def rows_for(use_entry, block, result_entry, result, before, after, project):
     if result is not None:
         content = text_of(result.get("content")) if not isinstance(result.get("content"), str) else result["content"]
         if result.get("is_error"):
-            status = "invalid" if "InputValidationError" in content else "declined"
+            status = error_status(content)
         else:
             status = "answered"
             extra = result_entry.get("toolUseResult") if isinstance(result_entry.get("toolUseResult"), dict) else {}
@@ -306,6 +323,8 @@ def cmd_stats(args):
     print(f"questionnaires {len({r['call'] for r in rows})}, questions {len(rows)}")
     print("kinds:", dict(Counter(r["kind"] for r in rows)))
     print("declined questionnaires:", len({r["call"] for r in rows if r["kind"] == "declined"}))
+    print("hook-blocked questionnaires:", len({r["call"] for r in rows if r["kind"] == "hook_blocked"}),
+          "(the owner never saw them; not a decline)")
     n, counts, line = headline(rows)
     print(f"single choice with a recommendation, answered: {n}: {line}")
     changed = [r for r in rows if r["kind"] == "changed"]
