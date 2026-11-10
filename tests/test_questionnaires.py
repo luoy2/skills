@@ -206,3 +206,149 @@ def test_a_hook_block_or_an_unreturned_call_is_not_the_owners_decline(qr, tmp_pa
     leads = capsys.readouterr().out
     assert "Q7 go?" in leads and leads.count("declined; then wrote") == 1  # only the owner's own refusal
     assert "carry on" not in leads  # text after a hook block is not read as a reason to decline
+
+
+@pytest.mark.parametrize("count", [1, 4])
+def test_cached_results_do_not_consume_official_calls(qr, tmp_path, count):
+    questions = [_q(f"Question {i}?", ["Go (Recommended)", "Stop"]) for i in range(count)]
+    call = _ask("cached", "2026-09-21T00:00:00Z", questions)
+    cached = _answer("cached", None, {q["question"]: "Go (Recommended)" for q in questions})
+    cached["type"] = "api-request-blob"
+    cached.pop("timestamp")
+    answer = _answer("cached", "2026-09-21T00:00:15Z", {q["question"]: "Stop" for q in questions})
+    root = tmp_path / "projects"
+    _write_log(root / "proj" / "s.jsonl", [call, cached, answer])
+    out = tmp_path / "rows.jsonl"
+    qr.main(["extract", "--since", "2026-09-20T00:00:00Z", "--projects", str(root), "--out", str(out)])
+    rows = qr.read_jsonl(out)
+    assert len(rows) == count and all(r["kind"] == "changed" and r["answer"] == "Stop" for r in rows)
+    assert all(r["sources"][0]["call_line"] == 1 and r["sources"][0]["result_line"] == 3 for r in rows)
+    report = json.loads(Path(str(out) + ".coverage.json").read_text())
+    assert any(d["code"] == "ignored_nonofficial_event" and d["line"] == 2 for d in report["diagnostics"])
+
+
+def test_nonofficial_calls_never_register_a_questionnaire(qr, tmp_path):
+    q = _q("Cached call?", ["Go (Recommended)", "Stop"])
+    cached = _ask("cache-only", "2026-09-21T00:00:00Z", [q])
+    cached["type"] = "api-request-blob"
+    path = tmp_path / "cached.jsonl"
+    _write_log(path, [cached, _answer("cache-only", "2026-09-21T00:00:02Z", {q["question"]: "Stop"})])
+    assert list(qr.calls_in(path)) == []
+
+
+@pytest.mark.parametrize("value", [None, "not-a-time", "2026-09-21T00:00:00"])
+def test_unavailable_result_timestamp_keeps_answer_without_fabricating_duration(qr, tmp_path, value):
+    q = _q("Keep answer?", ["Go (Recommended)", "Stop"])
+    root = tmp_path / "projects"
+    answer = _answer("time", value, {q["question"]: "Stop"})
+    if value is None:
+        answer.pop("timestamp")
+    _write_log(root / "p" / "s.jsonl", [_ask("time", "2026-09-21T00:00:00Z", [q]), answer])
+    out = tmp_path / "rows.jsonl"
+    qr.main(["extract", "--since", "2026-09-20T00:00:00Z", "--projects", str(root), "--out", str(out)])
+    row, = qr.read_jsonl(out)
+    assert row["kind"] == "changed" and row["seconds"] is None
+    report = json.loads(Path(str(out) + ".coverage.json").read_text())
+    assert any(d["code"] == "unknown_answer_time" for d in report["diagnostics"])
+
+
+def test_multiroot_copies_merge_provenance_and_conflicts_are_quarantined(qr, tmp_path, capsys):
+    q = _q("Which copy?", ["Go (Recommended)", "Stop"])
+    first, second = tmp_path / "a", tmp_path / "b"
+    common = [_ask("same", "2026-09-21T00:00:00Z", [q]),
+              _answer("same", "2026-09-21T00:00:03Z", {q["question"]: "Stop"})]
+    conflicting = _ask("conflict", "2026-09-21T01:00:00Z", [q])
+    _write_log(first / "p" / "s.jsonl", common + [conflicting,
+               _answer("conflict", "2026-09-21T01:00:03Z", {q["question"]: "Stop"})])
+    _write_log(second / "renamed-p" / "s-copy.jsonl", common + [conflicting,
+               _answer("conflict", "2026-09-21T01:00:03Z", {q["question"]: "Go (Recommended)"})])
+    outputs = []
+    for n, roots in enumerate(([first, second], [second, first])):
+        out = tmp_path / f"rows-{n}.jsonl"
+        argv = ["extract", "--since", "2026-09-20T00:00:00Z", "--out", str(out)]
+        for root in roots:
+            argv += ["--projects", str(root)]
+        with pytest.raises(SystemExit) as stopped:
+            qr.main(argv)
+        assert stopped.value.code == 1
+        rows = qr.read_jsonl(out)
+        row, = rows
+        assert row["id"] == "same#0" and len(row["sources"]) == 2
+        report = json.loads(Path(str(out) + ".coverage.json").read_text())
+        assert report["duplicate_calls"] == 1 and report["conflicting_calls"] == 1
+        assert len(report["roots"]) == 2 and all(r["status"] == "read" for r in report["roots"])
+        assert any(d["code"] == "conflicting_copy" and d["call"] == "conflict" for d in report["diagnostics"])
+        outputs.append(rows)
+        qr.main(["stats", "--rows", str(out)])
+        qr.main(["leads", "--rows", str(out)])
+    assert outputs[0] == outputs[1]
+    assert "conflicting calls 1" in capsys.readouterr().out
+
+
+def test_missing_root_is_not_a_successful_empty_scan(qr, tmp_path):
+    out = tmp_path / "rows.jsonl"
+    with pytest.raises(SystemExit) as stopped:
+        qr.main(["extract", "--since", "2026-09-20T00:00:00Z", "--projects", str(tmp_path / "absent"), "--out", str(out)])
+    assert stopped.value.code == 1
+    report = json.loads(Path(str(out) + ".coverage.json").read_text())
+    assert report["roots"][0]["status"] == "missing"
+    assert qr.read_jsonl(out) == []
+
+
+def test_unreadable_log_and_invalid_call_timestamp_are_reported(qr, tmp_path, monkeypatch):
+    q = _q("Bad clock?", ["Go (Recommended)", "Stop"])
+    root = tmp_path / "projects"
+    bad, unread = root / "p" / "bad.jsonl", root / "p" / "unread.jsonl"
+    _write_log(bad, [_ask("bad-clock", None, [q])])
+    _write_log(unread, [])
+    original = Path.read_text
+    def read(path, *args, **kwargs):
+        if path == unread:
+            raise PermissionError("test unreadable source")
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "read_text", read)
+    out = tmp_path / "rows.jsonl"
+    with pytest.raises(SystemExit) as stopped:
+        qr.main(["extract", "--since", "2026-09-20T00:00:00Z", "--projects", str(root), "--out", str(out)])
+    assert stopped.value.code == 1
+    report = json.loads(Path(str(out) + ".coverage.json").read_text())
+    assert {d["code"] for d in report["diagnostics"]} >= {"unreadable_source", "invalid_call_timestamp"}
+    assert next(d for d in report["diagnostics"] if d["code"] == "unreadable_source")["path"] == str(unread)
+    assert qr.read_jsonl(out) == []
+
+
+def test_multiroot_keeps_half_open_window_and_default_root(qr, tmp_path, monkeypatch):
+    q = _q("Window?", ["Go (Recommended)", "Stop"])
+    root = tmp_path / ".claude" / "projects"
+    _write_log(root / "p" / "s.jsonl", [
+        _ask("inside", "2026-09-21T00:00:00Z", [q]),
+        _answer("inside", "2026-09-21T00:00:03Z", {q["question"]: "Stop"}),
+        _ask("boundary", "2026-09-22T00:00:00Z", [q])])
+    monkeypatch.setenv("HOME", str(tmp_path))
+    out = tmp_path / "rows.jsonl"
+    qr.main(["extract", "--since", "2026-09-21T00:00:00Z", "--until", "2026-09-22T00:00:00Z", "--out", str(out)])
+    assert [r["id"] for r in qr.read_jsonl(out)] == ["inside#0"]
+    report = json.loads(Path(str(out) + ".coverage.json").read_text())
+    assert report["roots"][0]["root"] == str(root)
+
+
+def test_changed_answer_does_not_reuse_a_label_by_id_alone(qr, rows, tmp_path, monkeypatch, capsys):
+    _, path = rows
+    calls = []
+    def fake(model, prompt, timeout):
+        items = json.loads(prompt[prompt.index("["):])
+        calls.append([i["id"] for i in items])
+        return {"items": [{"id": i["id"], "rec_action": "act_now", "chosen_action": "act_now", "theme": "none", "note": ""}
+                          for i in items]}, 0
+    monkeypatch.setattr(qr, "run_claude", fake)
+    labels = tmp_path / "labels.jsonl"
+    argv = ["classify", "--rows", str(path), "--labels", str(labels), "--parallel", "1"]
+    qr.main(argv)
+    changed = qr.read_jsonl(path)
+    changed[0].update(answer="Wait", kind="changed", picked=[1])
+    path.write_text("".join(json.dumps(r) + "\n" for r in changed))
+    capsys.readouterr()
+    qr.main(["stats", "--rows", str(path), "--labels", str(labels)])
+    assert "labelled 2 of 3" in capsys.readouterr().out
+    qr.main(argv)
+    assert calls == [["a#0", "a#1", "b#0"], ["a#0"]]

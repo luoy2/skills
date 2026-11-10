@@ -12,7 +12,7 @@ has a small model label what each recommended option does and, for an overridden
 one, what the owner chose instead: a judgment about meaning, so no keyword list
 decides it. `stats` counts; `leads` prints the overridden questions to read in full.
 
-    questionnaires.py extract --since 2026-01-01T00:00:00Z [--until ...] [--projects ~/.claude/projects] --out rows.jsonl
+    questionnaires.py extract --since 2026-01-01T00:00:00Z [--until ...] [--projects ROOT ...] --out rows.jsonl
     questionnaires.py classify --rows rows.jsonl --labels labels.jsonl [--classifier claude:claude-haiku-4-5] [--batch 25] [--parallel 4]
     questionnaires.py stats --rows rows.jsonl [--labels labels.jsonl] [--split 2026-01-15T00:00:00Z]
     questionnaires.py leads --rows rows.jsonl [--labels labels.jsonl] [--tz America/New_York]
@@ -22,6 +22,7 @@ never in the repository. `leads` masks secret-shaped strings before printing.
 """
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -103,14 +104,21 @@ def kind_of(question, answer, recommended):
     return ("accepted" if picked[0] in recommended else "changed"), picked, own
 
 
-def calls_in(path):
-    """Yield (tool_use entry, block, result entry, result block, text before, owner text after) for each questionnaire."""
+def calls_in(path, diagnostics=None):
+    """Pair official assistant calls with user results; cached events never consume a call."""
+    diagnostics = diagnostics if diagnostics is not None else []
     entries = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            entries.append(json.loads(line))
-        except json.JSONDecodeError:
+    for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        if not line.strip():
             continue
+        try:
+            entry = json.loads(line)
+            if not isinstance(entry, dict):
+                raise ValueError("not an event")
+        except ValueError:
+            diagnostics.append({"code": "invalid_event", "path": str(path), "line": number})
+            continue
+        entries.append({**entry, "_line": number})
     uses = {}
     for i, entry in enumerate(entries):
         content = (entry.get("message") or {}).get("content")
@@ -119,7 +127,18 @@ def calls_in(path):
         for block in content:
             if not isinstance(block, dict):
                 continue
-            if block.get("type") == "tool_use" and block.get("name") == "AskUserQuestion":
+            is_call = block.get("type") == "tool_use" and block.get("name") == "AskUserQuestion"
+            is_result = block.get("type") == "tool_result" and block.get("tool_use_id") in uses
+            if not (is_call or is_result):
+                continue
+            expected_type = "assistant" if is_call else "user"
+            if entry.get("type") != expected_type:
+                diagnostics.append({"code": "ignored_nonofficial_event", "path": str(path), "line": entry["_line"]})
+                continue
+            if is_call:
+                if not block.get("id"):
+                    diagnostics.append({"code": "missing_call_id", "path": str(path), "line": entry["_line"]})
+                    continue
                 before = ""
                 for j in range(i, max(-1, i - 8), -1):
                     if entries[j].get("type") == "assistant":
@@ -128,13 +147,25 @@ def calls_in(path):
                             break
                     elif owner_text(entries[j]):
                         break
+                if block["id"] in uses:
+                    previous_entry, previous_block, previous_before = uses[block["id"]]
+                    yield previous_entry, previous_block, None, None, previous_before, ""
                 uses[block["id"]] = (entry, block, before)
-            elif block.get("type") == "tool_result" and block.get("tool_use_id") in uses:
+            elif is_result:
                 use_entry, use_block, before = uses.pop(block["tool_use_id"])
                 after = next((owner_text(e) for e in entries[i + 1:i + 40] if owner_text(e)), "")
                 yield use_entry, use_block, entry, block, before, after
     for use_entry, use_block, before in uses.values():
         yield use_entry, use_block, None, None, before, ""
+
+
+def instant(value):
+    """A timezone-aware timestamp, or unknown; never synthesize a log clock."""
+    try:
+        parsed = parse_ts(value)
+        return parsed if parsed.tzinfo is not None else None
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def error_status(content):
@@ -163,7 +194,9 @@ def rows_for(use_entry, block, result_entry, result, before, after, project):
             answers, annotations = extra.get("answers") or {}, extra.get("annotations") or {}
     seconds = None
     if result_entry is not None and len(questions) == 1:
-        seconds = (parse_ts(result_entry["timestamp"]) - parse_ts(use_entry["timestamp"])).total_seconds()
+        start, end = instant(use_entry.get("timestamp")), instant(result_entry.get("timestamp"))
+        if start is not None and end is not None and end >= start:
+            seconds = (end - start).total_seconds()
     for qi, question in enumerate(questions):
         options = [{"label": o.get("label", ""), "description": o.get("description", "")} for o in question.get("options") or []]
         recommended = [i for i, o in enumerate(options) if RECOMMENDED.search(o["label"])]
@@ -190,21 +223,88 @@ def rows_for(use_entry, block, result_entry, result, before, after, project):
 
 
 def cmd_extract(args):
-    root = Path(os.path.expanduser(args.projects))
-    rows, seen = [], set()
-    for path in sorted(root.rglob("*.jsonl")):
-        if "AskUserQuestion" not in path.read_text(encoding="utf-8", errors="replace"):
+    since, until = instant(args.since), instant(args.until) if args.until else None
+    if since is None or (args.until and (until is None or until <= since)):
+        raise SystemExit("--since/--until require timezone-aware timestamps with until after since")
+    roots = sorted({Path(p).expanduser().resolve() for p in (args.projects or ["~/.claude/projects"])})
+    report = {"channel": "AskUserQuestion", "since": args.since, "until": args.until,
+              "roots": [], "diagnostics": [], "duplicate_calls": 0, "conflicting_calls": 0}
+    diagnostics, candidates = report["diagnostics"], {}
+    for root in roots:
+        coverage = {"root": str(root), "status": "read", "files": 0, "read_files": 0}
+        report["roots"].append(coverage)
+        if not root.is_dir():
+            coverage["status"] = "missing" if not root.exists() else "unreadable"
+            diagnostics.append({"code": "unreadable_root", "path": str(root)})
             continue
-        project = path.relative_to(root).parts[0]
-        for use_entry, block, result_entry, result, before, after in calls_in(path):
-            ts = use_entry.get("timestamp") or ""
-            if block["id"] in seen or ts < args.since or (args.until and ts >= args.until):
-                continue
-            seen.add(block["id"])
-            rows.extend(rows_for(use_entry, block, result_entry, result, before, after, project))
-    rows.sort(key=lambda r: (r["ts"], r["q"]))
+        def walk_error(error):
+            coverage["status"] = "partial"
+            diagnostics.append({"code": "unreadable_source", "path": str(error.filename), "errno": error.errno})
+        for directory, dirs, files in os.walk(root, onerror=walk_error):
+            dirs.sort()
+            for name in sorted(files):
+                if not name.endswith(".jsonl"):
+                    continue
+                path = Path(directory) / name
+                coverage["files"] += 1
+                try:
+                    calls = list(calls_in(path, diagnostics))
+                except OSError as error:
+                    coverage["status"] = "partial"
+                    diagnostics.append({"code": "unreadable_source", "path": str(path), "errno": error.errno})
+                    continue
+                coverage["read_files"] += 1
+                project = path.relative_to(root).parts[0]
+                for use, block, result_entry, result, before, after in calls:
+                    timestamp = instant(use.get("timestamp"))
+                    source = {"root": str(root), "path": str(path), "call_line": use["_line"],
+                              "result_line": result_entry["_line"] if result_entry else None}
+                    if timestamp is None:
+                        diagnostics.append({"code": "invalid_call_timestamp", "call": block["id"], **source})
+                        continue
+                    if timestamp < since or (until and timestamp >= until):
+                        continue
+                    rows = list(rows_for(use, block, result_entry, result, before, after, project))
+                    if not rows:
+                        diagnostics.append({"code": "missing_questions", "call": block["id"], **source})
+                        continue
+                    if result_entry and len(rows) == 1 and rows[0]["seconds"] is None:
+                        diagnostics.append({"code": "unknown_answer_time", "call": block["id"], **source})
+                    # Paths and surrounding prose can change in a resumed copy; the call and answer cannot.
+                    identity = [{k: v for k, v in row.items() if k not in ("project", "before", "after")}
+                                for row in rows]
+                    key = json.dumps(identity, sort_keys=True, ensure_ascii=False)
+                    candidates.setdefault(block["id"], []).append((key, rows, source))
+    rows = []
+    for call, copies in sorted(candidates.items()):
+        if len({key for key, _, _ in copies}) > 1:
+            report["conflicting_calls"] += 1
+            diagnostics.append({"code": "conflicting_copy", "call": call,
+                                "sources": [source for _, _, source in copies]})
+            continue
+        report["duplicate_calls"] += len(copies) - 1
+        rows.extend({**row, "sources": [source for _, _, source in copies]} for row in copies[0][1])
+    rows.sort(key=lambda r: (instant(r["ts"]), r["call"], r["q"]))
+    report.update(questionnaires=len({r["call"] for r in rows}), questions=len(rows))
+    report["complete"] = not any(d["code"] not in ("ignored_nonofficial_event", "unknown_answer_time") for d in diagnostics)
     Path(args.out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
-    print(f"{len({r['call'] for r in rows})} questionnaires, {len(rows)} questions -> {args.out}")
+    Path(str(args.out) + ".coverage.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"{report['questionnaires']} questionnaires, {len(rows)} questions -> {args.out}")
+    print_coverage(args.out)
+    if not report["complete"]:
+        raise SystemExit(1)
+
+
+def print_coverage(rows_path):
+    path = Path(str(rows_path) + ".coverage.json")
+    if not path.exists():
+        print("extraction coverage: unknown (no companion report)")
+        return
+    report = json.loads(path.read_text(encoding="utf-8"))
+    read = sum(r["status"] == "read" for r in report["roots"])
+    print(f"extraction coverage: {read}/{len(report['roots'])} roots read; "
+          f"duplicate calls {report['duplicate_calls']}; conflicting calls {report['conflicting_calls']}; "
+          f"complete {report['complete']} (declared AskUserQuestion sources only)")
 
 
 CLASSIFY_PROMPT = """Each item is one question a coding agent put to a repository owner as a multiple-choice questionnaire, with the option the agent marked recommended and the owner's answer (a listed option, or the owner's own words). Label every item.
@@ -265,15 +365,30 @@ def run_claude(model, prompt, timeout):
     return out["structured_output"], out.get("total_cost_usd")
 
 
+def row_digest(row):
+    fields = ("id", "session", "ts", "question", "options", "recommended", "answer", "notes", "kind", "multi")
+    body = json.dumps({key: row.get(key) for key in fields}, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def current_labels(rows, path):
+    """Legacy or changed-answer labels are unbound, even when the call id was reused."""
+    digests = {row["id"]: row_digest(row) for row in rows}
+    return {label["id"]: label for label in read_jsonl(path)
+            if label.get("row_digest") and label["row_digest"] == digests.get(label["id"])}
+
+
 def label_batch(call, batch, classifier):
     """Labels for the ids asked; an id the model skipped stays unlabelled for the next run."""
     result, cost = call(batch_prompt(batch))
     asked = {row["id"] for row in batch}
+    digests = {row["id"]: row_digest(row) for row in batch}
     labels = []
     for item in result.get("items", []):
         if item.get("id") in asked:
             asked.discard(item["id"])
-            labels.append({**{k: item[k] for k in SCHEMA["properties"]["items"]["items"]["required"]}, "classifier": classifier})
+            labels.append({**{k: item[k] for k in SCHEMA["properties"]["items"]["items"]["required"]},
+                           "classifier": classifier, "row_digest": digests[item["id"]]})
     return labels, cost, sorted(asked)
 
 
@@ -281,8 +396,9 @@ def cmd_classify(args):
     runtime, _, model = args.classifier.partition(":")
     if runtime != "claude" or not model:
         raise SystemExit("--classifier is claude:<model>")
-    done = {label["id"] for label in read_jsonl(args.labels)}
-    todo = [r for r in read_jsonl(args.rows) if r["kind"] in ANSWERED and r["recommended"] and not r["multi"] and r["id"] not in done]
+    rows = read_jsonl(args.rows)
+    done = current_labels(rows, args.labels)
+    todo = [r for r in rows if r["kind"] in ANSWERED and r["recommended"] and not r["multi"] and r["id"] not in done]
     batches = [todo[i:i + args.batch] for i in range(0, len(todo), args.batch)]
     spent, missing, failed = 0.0, [], 0
     call = lambda prompt: run_claude(model, prompt, args.timeout)  # noqa: E731
@@ -319,7 +435,8 @@ def headline(rows):
 
 def cmd_stats(args):
     rows = read_jsonl(args.rows)
-    labels = {label["id"]: label for label in read_jsonl(args.labels)} if args.labels else {}
+    labels = current_labels(rows, args.labels) if args.labels else {}
+    print_coverage(args.rows)
     print(f"questionnaires {len({r['call'] for r in rows})}, questions {len(rows)}")
     print("kinds:", dict(Counter(r["kind"] for r in rows)))
     print("declined questionnaires:", len({r["call"] for r in rows if r["kind"] == "declined"}))
@@ -337,7 +454,7 @@ def cmd_stats(args):
     if args.split:
         for name, part in (("before", [r for r in rows if r["ts"] < args.split]), ("after", [r for r in rows if r["ts"] >= args.split])):
             print(f"{name} {args.split}: " + "{} graded: {}".format(*headline(part)[::2]))
-    if not labels:
+    if not args.labels:
         return
     graded = [r for r in rows if r["id"] in labels]
     print(f"\nlabelled {len(graded)} of {n}")
@@ -387,7 +504,8 @@ def date_format(tz):
 
 def cmd_leads(args):
     rows = read_jsonl(args.rows)
-    labels = {label["id"]: label for label in read_jsonl(args.labels)} if args.labels else {}
+    labels = current_labels(rows, args.labels) if args.labels else {}
+    print_coverage(args.rows)
     local_date = date_format(args.tz)
     for row in rows:
         if row["kind"] not in ("changed", "own", "declined"):
@@ -409,7 +527,7 @@ def main(argv=None):
     ex = sub.add_parser("extract")
     ex.add_argument("--since", required=True, help="ISO UTC timestamp, e.g. 2026-01-01T00:00:00Z")
     ex.add_argument("--until", default="")
-    ex.add_argument("--projects", default="~/.claude/projects")
+    ex.add_argument("--projects", action="append", help="repeat for explicit log roots; default: ~/.claude/projects")
     ex.add_argument("--out", required=True)
     ex.set_defaults(func=cmd_extract)
     cl = sub.add_parser("classify")

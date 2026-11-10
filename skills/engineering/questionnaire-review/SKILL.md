@@ -32,11 +32,25 @@ describes, and ship them in the same PR as the first rules.
 2. **Earlier rounds.** Read the previous rounds' PRs and the owner's answers on
    them. Do not raise again a rule the owner declined.
 3. **Numbers.** Run `scripts/questionnaires.py` (`--help` lists the options):
-   - `extract --since <window start> --out <private>/rows.jsonl`
+   - `extract --since <window start> --out <private>/rows.jsonl`: repeat
+     `--projects <root>` for every log root in scope; without it, only
+     `~/.claude/projects` is read. The window includes `since` and excludes `until`.
+     Read the companion `rows.jsonl.coverage.json`: it lists roots, unread or
+     malformed sources, ignored cached events, duplicate calls and conflicting
+     copies. Identical call/question/answer rows merge their source paths and line
+     numbers; differing copies of a call are all excluded, never chosen by path
+     order. Missing answer timestamps keep the answer but leave duration unknown;
+     missing call timestamps cannot enter the window. Missing sources or conflicts
+     write the unambiguous subset and exit 1, so it is not a complete-source result.
+     Coverage names only declared AskUserQuestion sources, not other channels.
    - `classify --rows … --labels …`: a small model labels the recommended
      action, the chosen action and the theme of each override. It exits 1 while
      anything is unlabelled, a failed batch included; rerun it, and report what
-     the model still skips after a rerun as unlabelled.
+     the model still skips after a rerun as unlabelled. Labels bind to the current
+     question and answer content as well as the id. Legacy unbound labels and
+     changed-answer labels are ignored by `stats`/`leads` and relabelled by the
+     existing classifier; the previous label file is never treated as proof that
+     a corrected row was labelled.
    - `stats --rows … --labels … --split <previous round's merge time>`
    - `leads --rows … --labels …`, with `--tz <zone>` when the owner reads dates
      in another time zone than this machine's
